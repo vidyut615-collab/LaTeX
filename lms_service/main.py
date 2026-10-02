@@ -238,9 +238,13 @@ CRITICAL RULES:
 
 2. STEP-BY-STEP LAYOUT: You MUST place every single mathematical step on its own separate line. Use double line breaks (\\n\\n) between every step so equations never collapse into a single paragraph.
 
-3. FINAL ANSWER: Always state the final conclusion clearly on the very last line of the explanation (e.g., "Final Answer: Option B, (x : y) = 2 : 1").
+3. CAREFUL OPTION EXTRACTION & MAPPING: You must look carefully for the correct option.
+   - Universal Mapping: Regardless of how options are labeled in the book (e.g., numbers 1-4, lowercase a-d, roman numerals, or alternate letters), you MUST translate the correct answer to the standard capital letters (A, B, C, D, E) based on sequence. The 1st option is always A, the 2nd is B, the 3rd is C, and the 4th is D.
+   - No Hallucination: If the correct option is genuinely NOT printed anywhere in the text, you must leave the `correct` field blank "". DO NOT guess or hallucinate an answer.
 
-4. CLEAN EXPLANATIONS: Do not include unnecessary headers from the book. If the book's solution is missing steps, write it out clearly. If the text explains a diagram or puzzle, capture the logical explanation perfectly in text.
+4. FINAL ANSWER: Always state the final conclusion clearly on the very last line of the explanation (e.g., "Final Answer: Option B, (x : y) = 2 : 1").
+
+5. CLEAN EXPLANATIONS: Do not include unnecessary headers from the book. If the book's solution is missing steps, write it out clearly. If the text explains a diagram or puzzle, capture the logical explanation perfectly in text.
 """
 
     import fitz
@@ -342,14 +346,18 @@ CRITICAL RULES:
 
 2. STEP-BY-STEP LAYOUT: You MUST place every single mathematical step on its own separate line. Use double line breaks (\\n\\n) between every step so equations never collapse into a single paragraph.
 
-3. FINAL ANSWER: Always state the final conclusion clearly on the very last line of the explanation (e.g., "Final Answer: Option B, (x : y) = 2 : 1").
+3. CAREFUL OPTION EXTRACTION & MAPPING: You must look carefully for the correct option.
+   - Universal Mapping: Regardless of how options are labeled in the book (e.g., numbers 1-4, lowercase a-d, roman numerals, or alternate letters), you MUST translate the correct answer to the standard capital letters (A, B, C, D, E) based on sequence. The 1st option is always A, the 2nd is B, the 3rd is C, and the 4th is D.
+   - No Hallucination: If the correct option is genuinely NOT printed anywhere in the text, you must leave the `correct` field blank "". DO NOT guess or hallucinate an answer.
 
-4. CLEAN EXPLANATIONS: Do not include unnecessary headers from the book. If the book's solution is missing steps, write it out clearly. If the text explains a diagram or puzzle, capture the logical explanation perfectly in text.
+4. FINAL ANSWER: Always state the final conclusion clearly on the very last line of the explanation (e.g., "Final Answer: Option B, (x : y) = 2 : 1").
+
+5. CLEAN EXPLANATIONS: Do not include unnecessary headers from the book. If the book's solution is missing steps, write it out clearly. If the text explains a diagram or puzzle, capture the logical explanation perfectly in text.
 
 You MUST return a JSON object with a single key "data", which contains an array of objects.
 Each object must have:
 - "num" (string): The solution number.
-- "correct" (string): The correct option letter.
+- "correct" (string): The correct option letter (A, B, C, D, E) or blank "" if genuinely missing.
 - "explanation" (string): The step-by-step explanation text formatted with double line breaks.
 """
 
