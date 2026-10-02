@@ -227,23 +227,25 @@ Return a JSON array of objects. Each object must have:
 - "options": an object with keys "a", "b", "c", "d", etc.
 """)
     else:
-        prompt = lines_cache.get('gemini_s_prompt', """You are a strict data extractor and expert tutor for an LMS. Extract and rewrite all solutions/explanations from this page image into a clear, step-by-step format.
+        prompt = lines_cache.get('gemini_s_prompt', """You are a strict data transcriber for an LMS. Extract the solutions/explanations exactly as they appear in this page image without adding conversational filler or rewriting them.
 
 CRITICAL RULES:
 1. PLAIN TEXT MATH: Do NOT use LaTeX or TeX. Write all math in clean, plain-text format.
-   - Fractions: Always use parentheses for clarity (e.g., `(a + b) / c`).
-   - Multiplication: Use `*` or parentheses, NEVER use the algebra letter `x`.
-   - Powers & Roots: Use `^` for exponents (e.g., `y^2`) and `sqrt()` for roots.
+   - Fractions: Always use parentheses for clarity (e.g., (a + b) / c).
+   - Multiplication: Use * or parentheses, NEVER use the algebra letter x.
+   - Powers & Roots: Use ^ for exponents (e.g., y^2) and sqrt() for roots.
 
-2. STEP-BY-STEP LAYOUT: You MUST place every single mathematical step on its own separate line. Use double line breaks (\\n\\n) between every step so equations never collapse into a single paragraph.
+2. PURE MATHEMATICAL TRANSCRIPTION (NO TUTORING): Do not explain the math in words. If the book shows an equation or calculation, output only the plain mathematical expression exactly as it is printed. Do NOT add conversational text describing the steps. Only include English words if they are actually printed on the page. NEVER correct the book's math; even if it contains a typo or calculation error, transcribe it exactly as printed.
 
-3. CAREFUL OPTION EXTRACTION & MAPPING: You must look carefully for the correct option.
+3. SPACING & LAYOUT: If a solution contains multiple lines of equations, place each equation on its own separate line using double line breaks (\n\n) so they do not collapse into a single paragraph.
+
+4. CAREFUL OPTION EXTRACTION & MAPPING: You must look carefully for the correct option.
    - Universal Mapping: Regardless of how options are labeled in the book (e.g., numbers 1-4, lowercase a-d, roman numerals, or alternate letters), you MUST translate the correct answer to the standard capital letters (A, B, C, D, E) based on sequence. The 1st option is always A, the 2nd is B, the 3rd is C, and the 4th is D.
-   - No Hallucination: If the correct option is genuinely NOT printed anywhere in the text, you must leave the `correct` field blank "". DO NOT guess or hallucinate an answer.
+   - No Hallucination: If the correct option is genuinely NOT printed anywhere in the text, you must leave the correct field blank "". DO NOT guess or hallucinate an answer.
 
-4. FINAL ANSWER: Always state the final conclusion clearly on the very last line of the explanation (e.g., "Final Answer: Option B, (x : y) = 2 : 1").
+5. FINAL ANSWER: Always state the final conclusion clearly on the very last line of the explanation (e.g., "Final Answer: Option B").
 
-5. CLEAN EXPLANATIONS: Do not include unnecessary headers from the book. If the book's solution is missing steps, write it out clearly. If the text explains a diagram or puzzle, capture the logical explanation perfectly in text.
+6. CLEAN EXPLANATIONS: Do not include unnecessary headers from the book. If the text explains a diagram or puzzle, capture the logical explanation perfectly in text, but do not invent extra mathematical steps that aren't printed on the page.
 """)
 
     import fitz
@@ -350,29 +352,25 @@ Each object must have:
 - "options" (object): The answer options, keys must be "a", "b", "c", "d", etc.
 """
     else:
-        prompt = """You are a strict data extractor and expert tutor for an LMS. Extract and rewrite all solutions/explanations from this page image into a clear, step-by-step format.
+        prompt = """You are a strict data transcriber for an LMS. Extract the solutions/explanations exactly as they appear in this page image without adding conversational filler or rewriting them.
 
 CRITICAL RULES:
 1. PLAIN TEXT MATH: Do NOT use LaTeX or TeX. Write all math in clean, plain-text format.
-   - Fractions: Always use parentheses for clarity (e.g., `(a + b) / c`).
-   - Multiplication: Use `*` or parentheses, NEVER use the algebra letter `x`.
-   - Powers & Roots: Use `^` for exponents (e.g., `y^2`) and `sqrt()` for roots.
+   - Fractions: Always use parentheses for clarity (e.g., (a + b) / c).
+   - Multiplication: Use * or parentheses, NEVER use the algebra letter x.
+   - Powers & Roots: Use ^ for exponents (e.g., y^2) and sqrt() for roots.
 
-2. STEP-BY-STEP LAYOUT: You MUST place every single mathematical step on its own separate line. Use double line breaks (\\n\\n) between every step so equations never collapse into a single paragraph.
+2. PURE MATHEMATICAL TRANSCRIPTION (NO TUTORING): Do not explain the math in words. If the book shows an equation or calculation, output only the plain mathematical expression exactly as it is printed. Do NOT add conversational text describing the steps. Only include English words if they are actually printed on the page. NEVER correct the book's math; even if it contains a typo or calculation error, transcribe it exactly as printed.
 
-3. CAREFUL OPTION EXTRACTION & MAPPING: You must look carefully for the correct option.
+3. SPACING & LAYOUT: If a solution contains multiple lines of equations, place each equation on its own separate line using double line breaks (\n\n) so they do not collapse into a single paragraph.
+
+4. CAREFUL OPTION EXTRACTION & MAPPING: You must look carefully for the correct option.
    - Universal Mapping: Regardless of how options are labeled in the book (e.g., numbers 1-4, lowercase a-d, roman numerals, or alternate letters), you MUST translate the correct answer to the standard capital letters (A, B, C, D, E) based on sequence. The 1st option is always A, the 2nd is B, the 3rd is C, and the 4th is D.
-   - No Hallucination: If the correct option is genuinely NOT printed anywhere in the text, you must leave the `correct` field blank "". DO NOT guess or hallucinate an answer.
+   - No Hallucination: If the correct option is genuinely NOT printed anywhere in the text, you must leave the correct field blank "". DO NOT guess or hallucinate an answer.
 
-4. FINAL ANSWER: Always state the final conclusion clearly on the very last line of the explanation (e.g., "Final Answer: Option B, (x : y) = 2 : 1").
+5. FINAL ANSWER: Always state the final conclusion clearly on the very last line of the explanation (e.g., "Final Answer: Option B").
 
-5. CLEAN EXPLANATIONS: Do not include unnecessary headers from the book. If the book's solution is missing steps, write it out clearly. If the text explains a diagram or puzzle, capture the logical explanation perfectly in text.
-
-You MUST return a JSON object with a single key "data", which contains an array of objects.
-Each object must have:
-- "num" (string): The solution number.
-- "correct" (string): The correct option letter (A, B, C, D, E) or blank "" if genuinely missing.
-- "explanation" (string): The step-by-step explanation text formatted with double line breaks.
+6. CLEAN EXPLANATIONS: Do not include unnecessary headers from the book. If the text explains a diagram or puzzle, capture the logical explanation perfectly in text, but do not invent extra mathematical steps that aren't printed on the page.
 """
 
     headers = {
