@@ -42,6 +42,7 @@ export default function ExtractorPage() {
     const [filePath, setFilePath] = useState('');
     const [isExtracting, setIsExtracting] = useState(false);
     const [downloadFiles, setDownloadFiles] = useState(null);
+    const [jobProgress, setJobProgress] = useState(null);
 
     // Extractor Logic
     const handleFile = (e) => {
@@ -138,12 +139,33 @@ export default function ExtractorPage() {
         formData.append("bottom_margin_pct", bottomMargin);
         formData.append("columns", columns);
 
+        const jobId = crypto.randomUUID();
+        formData.append("job_id", jobId);
+
+        setJobProgress(null);
+        let pollInterval = setInterval(async () => {
+            try {
+                const statusRes = await fetch(`${API_URL}/api/status/${jobId}`);
+                if (statusRes.ok) {
+                    const statusData = await statusRes.json();
+                    if (statusData.status === "processing" || statusData.status === "done") {
+                        setJobProgress(statusData);
+                    }
+                    if (statusData.status === "done") clearInterval(pollInterval);
+                }
+            } catch(e) {}
+        }, 1000);
+
         try {
             const res = await fetch(`${API_URL}/api/extract`, { method: "POST", headers: authHeaders(), body: formData });
             const data = await res.json();
+            clearInterval(pollInterval);
             if (!res.ok) throw new Error(data.detail || "Extraction failed.");
             setDownloadFiles(data.files);
+            setJobProgress(null);
         } catch (err) {
+            clearInterval(pollInterval);
+            setJobProgress(null);
             alert(err.message);
         }
         setIsExtracting(false);
@@ -336,6 +358,21 @@ export default function ExtractorPage() {
                     </button>
                 </div>
 
+                {/* Progress Bar */}
+                {isExtracting && jobProgress && jobProgress.total > 0 && (
+                    <div className="bg-white border border-indigo-100 rounded-xl p-4 shadow-sm mt-4 animate-fade-in">
+                        <div className="flex justify-between items-end mb-2">
+                            <div>
+                                <h3 className="text-sm font-bold text-slate-800">{jobProgress.phase || "Processing"}</h3>
+                                <p className="text-xs text-slate-500 font-medium">Parsed {jobProgress.current} of {jobProgress.total} pages</p>
+                            </div>
+                            <span className="text-sm font-black text-indigo-600">{Math.round((jobProgress.current / jobProgress.total) * 100)}%</span>
+                        </div>
+                        <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
+                            <div className="bg-indigo-600 h-2.5 rounded-full transition-all duration-300 ease-out" style={{ width: `${Math.round((jobProgress.current / jobProgress.total) * 100)}%` }}></div>
+                        </div>
+                    </div>
+                )}
                 {/* Downloads Area */}
                 {downloadFiles && (
                     <div className="bg-emerald-50 rounded-xl border border-emerald-200 p-4 shadow-sm flex-1 flex flex-col animate-fade-in overflow-y-auto">

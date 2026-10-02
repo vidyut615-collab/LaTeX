@@ -322,12 +322,14 @@ Each object must have:
     }
     
     tokens = {"input": 0, "output": 0, "total": 0}
-    max_retries = 3
+    max_retries = 6
     
     for attempt in range(max_retries):
         try:
             if attempt > 0:
-                time.sleep(4)
+                backoff_time = 2 ** attempt  # 2, 4, 8, 16, 32 seconds
+                print(f"Groq API retry {attempt}/{max_retries - 1}. Waiting {backoff_time}s...")
+                time.sleep(backoff_time)
                 
             with httpx.Client(timeout=120.0) as client:
                 resp = client.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=payload)
@@ -426,6 +428,13 @@ class SettingRequest(BaseModel):
     gemini_model: str = ""
     groq_model: str = ""
     active_ai_provider: str = "gemini"
+
+# Global dictionary to track long-running jobs (like PDF parsing)
+PROGRESS_TRACKER = {}
+
+@app.get("/api/status/{job_id}")
+async def get_status(job_id: str):
+    return PROGRESS_TRACKER.get(job_id, {"status": "unknown"})
 
 @app.get("/api/auth/status")
 async def auth_status(authorization: str = Header(None), x_session_token: str = Header(None)):
@@ -744,6 +753,7 @@ async def extract_pdf(
     q_end_bottom: float = Form(0.0),
     s_start_top: float = Form(0.0),
     s_end_bottom: float = Form(0.0),
+    job_id: str = Form(""),
     current_user: dict = Depends(get_current_user)
 ):
     pdf_bytes = await file.read()
@@ -787,10 +797,21 @@ async def extract_pdf(
     total_output_tokens = 0
     pages_processed_ai = 0
     
+    # Job Tracking
+    total_pages = (q_end - q_start + 1) + (s_end - s_start + 1)
+    current_page = 0
+    if job_id:
+        PROGRESS_TRACKER[job_id] = {"status": "processing", "current": 0, "total": total_pages, "phase": "Initializing"}
+    
     # 1. EXTRACT QUESTIONS
     q_text_buffer = ""
     for i in range(q_start - 1, q_end):
         if i >= len(doc): break
+        
+        current_page += 1
+        if job_id:
+            PROGRESS_TRACKER[job_id].update({"current": current_page, "phase": f"Extracting Questions (Page {i+1})"})
+            
         page = doc[i]
         
         # Physical Boundary Cropping
@@ -826,6 +847,11 @@ async def extract_pdf(
     s_text_buffer = ""
     for i in range(s_start - 1, s_end):
         if i >= len(doc): break
+        
+        current_page += 1
+        if job_id:
+            PROGRESS_TRACKER[job_id].update({"current": current_page, "phase": f"Extracting Solutions (Page {i+1})"})
+            
         page = doc[i]
         
         # Physical Boundary Cropping
@@ -989,7 +1015,9 @@ async def extract_pdf(
     x_io = io.BytesIO()
     df.to_excel(x_io, index=False)
     x_io.seek(0)
-    
+    if job_id:
+        PROGRESS_TRACKER[job_id] = {"status": "done", "phase": "Complete"}
+        
     return JSONResponse({
         "files": {
             "questions_docx": base64.b64encode(q_io.read()).decode('utf-8'),
