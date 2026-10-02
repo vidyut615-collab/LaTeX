@@ -450,6 +450,17 @@ async def logout(user: dict = Depends(get_current_user), authorization: str = He
         db.delete_session(token)
     return {"message": "Logged out successfully"}
 
+@app.post("/api/auth/setup-admin")
+async def setup_admin(req: CreateUserRequest):
+    if db.has_super_admin():
+        raise HTTPException(status_code=400, detail="Super Admin already exists")
+    user = db.create_user(req.name, req.username, req.password, role="super_admin")
+    token = db.create_session(user["id"])
+    return {
+        "token": token,
+        "user": {"id": user["id"], "name": user["name"], "username": user["username"], "role": user["role"]}
+    }
+
 # ---------------------------------------------------------
 # SUPER ADMIN ENDPOINTS
 # ---------------------------------------------------------
