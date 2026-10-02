@@ -4,7 +4,9 @@ import hashlib
 import secrets
 from datetime import datetime
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "lms.db")
+DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
+os.makedirs(DATA_DIR, exist_ok=True)
+DB_PATH = os.path.join(DATA_DIR, "lms.db")
 
 def get_connection():
     conn = sqlite3.connect(DB_PATH)
