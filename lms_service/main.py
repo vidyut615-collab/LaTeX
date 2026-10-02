@@ -193,11 +193,27 @@ def extract_with_gemini(page, api_key: str, mode: str, model_name: str, page_top
             )
         )
         prompt = """You are a strict data extractor for an LMS. Extract all questions from this page image.
-CRITICAL FORMATTING RULE: 
-You MUST format all math using plain TeX.
-- NEVER use modern \frac{a}{b} for fractions.
-- You MUST format fractions using \over like this: {a \over b}
-- Example: The quadratic formula must be written as x = {-b \pm \sqrt{b^2-4ac} \over 2a}
+
+CRITICAL RULES:
+1. PLAIN TEXT MATH: Do NOT use LaTeX or TeX. Write all math in clean, plain-text format. 
+   - Use parentheses for fractions (e.g., `(x + 2) / 4`).
+   - Use `^` for exponents (e.g., `x^2`) and `sqrt()` for roots.
+   - Use `*` for multiplication, NEVER use the letter `x`.
+
+2. SPACING & LAYOUT: If a question contains multiple equations, a list of statements, or multiple conclusions (like in Syllogisms), you MUST place each one on its own separate line. Use double line breaks (\\n\\n) between them so they do not collapse into a single paragraph.
+
+3. DIRECTIONS vs. PUZZLES/PASSAGES: You must distinguish between "Instructional Text" and "Puzzles":
+   - INSTRUCTIONS: Do NOT copy general instructional text (e.g., "In the following questions..." or "Mark A if...") into the question `text`.
+   - PUZZLES/PASSAGES: If a block of text is a Reading Comprehension passage, a Logic Puzzle, or a Data Set meant for a group of questions, you MUST copy that entire passage/puzzle into the `text` of EVERY SINGLE question it applies to. Separate the puzzle from the specific question using double line breaks (\\n\\n).
+
+4. MASTER OPTIONS: If an "Instructional" block provides master options (e.g., "(A) if only conclusion I follows..."), extract ONLY those option choices and put them into the `options` object for all applicable questions on that page. 
+
+5. MISSING OPTIONS: If a question is a Logical Reasoning, Syllogism, or Statement-Conclusion type and NO options are printed anywhere on the page, you MUST automatically generate the standard options:
+   "a": "If only conclusion I follows"
+   "b": "If only conclusion II follows"
+   "c": "If either conclusion I or II follows"
+   "d": "If neither conclusion I nor II follows"
+   "e": "If both conclusion I and II follow"
 """
     else:
         schema = types.Schema(
@@ -212,12 +228,19 @@ You MUST format all math using plain TeX.
                 required=["num", "correct", "explanation"]
             )
         )
-        prompt = """You are a strict data extractor for an LMS. Extract all solutions/explanations from this page image.
-CRITICAL FORMATTING RULE: 
-You MUST format all math using plain TeX.
-- NEVER use modern \frac{a}{b} for fractions.
-- You MUST format fractions using \over like this: {a \over b}
-- Example: The quadratic formula must be written as x = {-b \pm \sqrt{b^2-4ac} \over 2a}
+        prompt = """You are a strict data extractor and expert tutor for an LMS. Extract and rewrite all solutions/explanations from this page image into a clear, step-by-step format.
+
+CRITICAL RULES:
+1. PLAIN TEXT MATH: Do NOT use LaTeX or TeX. Write all math in clean, plain-text format.
+   - Fractions: Always use parentheses for clarity (e.g., `(a + b) / c`).
+   - Multiplication: Use `*` or parentheses, NEVER use the algebra letter `x`.
+   - Powers & Roots: Use `^` for exponents (e.g., `y^2`) and `sqrt()` for roots.
+
+2. STEP-BY-STEP LAYOUT: You MUST place every single mathematical step on its own separate line. Use double line breaks (\\n\\n) between every step so equations never collapse into a single paragraph.
+
+3. FINAL ANSWER: Always state the final conclusion clearly on the very last line of the explanation (e.g., "Final Answer: Option B, (x : y) = 2 : 1").
+
+4. CLEAN EXPLANATIONS: Do not include unnecessary headers from the book. If the book's solution is missing steps, write it out clearly. If the text explains a diagram or puzzle, capture the logical explanation perfectly in text.
 """
 
     import fitz
@@ -280,25 +303,54 @@ def extract_with_groq(page, api_key: str, mode: str, model_name: str, page_top: 
     
     if mode == "questions":
         prompt = """You are a strict data extractor for an LMS. Extract all questions from this page image.
-CRITICAL FORMATTING RULE: 
-You MUST format all math using plain TeX. NEVER use modern \\frac{a}{b} for fractions. You MUST format fractions using \\over like this: {a \\over b}.
+
+CRITICAL RULES:
+1. PLAIN TEXT MATH: Do NOT use LaTeX or TeX. Write all math in clean, plain-text format. 
+   - Use parentheses for fractions (e.g., `(x + 2) / 4`).
+   - Use `^` for exponents (e.g., `x^2`) and `sqrt()` for roots.
+   - Use `*` for multiplication, NEVER use the letter `x`.
+
+2. SPACING & LAYOUT: If a question contains multiple equations, a list of statements, or multiple conclusions (like in Syllogisms), you MUST place each one on its own separate line. Use double line breaks (\\n\\n) between them so they do not collapse into a single paragraph.
+
+3. DIRECTIONS vs. PUZZLES/PASSAGES: You must distinguish between "Instructional Text" and "Puzzles":
+   - INSTRUCTIONS: Do NOT copy general instructional text (e.g., "In the following questions..." or "Mark A if...") into the question `text`.
+   - PUZZLES/PASSAGES: If a block of text is a Reading Comprehension passage, a Logic Puzzle, or a Data Set meant for a group of questions, you MUST copy that entire passage/puzzle into the `text` of EVERY SINGLE question it applies to. Separate the puzzle from the specific question using double line breaks (\\n\\n).
+
+4. MASTER OPTIONS: If an "Instructional" block provides master options (e.g., "(A) if only conclusion I follows..."), extract ONLY those option choices and put them into the `options` object for all applicable questions on that page. 
+
+5. MISSING OPTIONS: If a question is a Logical Reasoning, Syllogism, or Statement-Conclusion type and NO options are printed anywhere on the page, you MUST automatically generate the standard options:
+   "a": "If only conclusion I follows"
+   "b": "If only conclusion II follows"
+   "c": "If either conclusion I or II follows"
+   "d": "If neither conclusion I nor II follows"
+   "e": "If both conclusion I and II follow"
 
 You MUST return a JSON object with a single key "data", which contains an array of objects.
 Each object must have:
 - "num" (string): The question number.
-- "text" (string): The question text.
+- "text" (string): The question text (including the puzzle/passage if applicable).
 - "options" (object): The answer options, keys must be "a", "b", "c", "d", etc.
 """
     else:
-        prompt = """You are a strict data extractor for an LMS. Extract all solutions/explanations from this page image.
-CRITICAL FORMATTING RULE: 
-You MUST format all math using plain TeX. NEVER use modern \\frac{a}{b} for fractions. You MUST format fractions using \\over like this: {a \\over b}.
+        prompt = """You are a strict data extractor and expert tutor for an LMS. Extract and rewrite all solutions/explanations from this page image into a clear, step-by-step format.
+
+CRITICAL RULES:
+1. PLAIN TEXT MATH: Do NOT use LaTeX or TeX. Write all math in clean, plain-text format.
+   - Fractions: Always use parentheses for clarity (e.g., `(a + b) / c`).
+   - Multiplication: Use `*` or parentheses, NEVER use the algebra letter `x`.
+   - Powers & Roots: Use `^` for exponents (e.g., `y^2`) and `sqrt()` for roots.
+
+2. STEP-BY-STEP LAYOUT: You MUST place every single mathematical step on its own separate line. Use double line breaks (\\n\\n) between every step so equations never collapse into a single paragraph.
+
+3. FINAL ANSWER: Always state the final conclusion clearly on the very last line of the explanation (e.g., "Final Answer: Option B, (x : y) = 2 : 1").
+
+4. CLEAN EXPLANATIONS: Do not include unnecessary headers from the book. If the book's solution is missing steps, write it out clearly. If the text explains a diagram or puzzle, capture the logical explanation perfectly in text.
 
 You MUST return a JSON object with a single key "data", which contains an array of objects.
 Each object must have:
 - "num" (string): The solution number.
 - "correct" (string): The correct option letter.
-- "explanation" (string): The explanation text.
+- "explanation" (string): The step-by-step explanation text formatted with double line breaks.
 """
 
     headers = {
