@@ -991,7 +991,11 @@ async def extract_pdf(
     solutions = [s for s in solutions if s['num'] in expected_s_nums]
     
     # 4. Build the mapping
-    sol_map = {str(s['num']): s for s in solutions}
+    import re
+    def normalize_num(n):
+        return re.sub(r'[^0-9]', '', str(n))
+        
+    sol_map = {normalize_num(s.get('num', '')): s for s in solutions}
     
     # Save Audit Log if Dynamic Engine was used
     if engine == 'dynamic':
@@ -1059,7 +1063,16 @@ async def extract_pdf(
     # 3. Generate Excel
     data = []
     for q in questions:
-        correct_ans = sol_map.get(str(q['num']), {}).get('correct', '')
+        q_norm = normalize_num(q.get('num', ''))
+        correct_ans = sol_map.get(q_norm, {}).get('correct', '')
+        
+        # Clean up correct answer string (e.g. "Option B" -> "B")
+        if correct_ans:
+            import re
+            match = re.search(r'[A-Ea-e]', correct_ans)
+            if match:
+                correct_ans = match.group(0).upper()
+                
         data.append({
             'Question Number': q['num'],
             'Correct Answer(s)': correct_ans,
