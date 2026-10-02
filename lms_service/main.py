@@ -167,7 +167,7 @@ You MUST format all math using plain TeX.
             
     return [], tokens
 
-def extract_with_gemini(page, api_key: str, mode: str, model_name: str):
+def extract_with_gemini(page, api_key: str, mode: str, model_name: str, page_top: float = 0.0, page_bottom: float = 1.0):
     client = genai.Client(api_key=api_key)
     
     if mode == "questions":
@@ -220,7 +220,10 @@ You MUST format all math using plain TeX.
 - Example: The quadratic formula must be written as x = {-b \pm \sqrt{b^2-4ac} \over 2a}
 """
 
-    pix = page.get_pixmap()
+    import fitz
+    rect = page.rect
+    clip_rect = fitz.Rect(0, rect.height * page_top, rect.width, rect.height * page_bottom)
+    pix = page.get_pixmap(clip=clip_rect)
     img_bytes = pix.tobytes("png")
     
     tokens = {"input": 0, "output": 0, "total": 0}
@@ -253,14 +256,17 @@ You MUST format all math using plain TeX.
 # ---------------------------------------------------------
 # GROQ VISION EXTRACTOR
 # ---------------------------------------------------------
-def extract_with_groq(page, api_key: str, mode: str, model_name: str):
+def extract_with_groq(page, api_key: str, mode: str, model_name: str, page_top: float = 0.0, page_bottom: float = 1.0):
     import base64
     import json
     import httpx
     import time
     import re
+    import fitz
     
-    pix = page.get_pixmap()
+    rect = page.rect
+    clip_rect = fitz.Rect(0, rect.height * page_top, rect.width, rect.height * page_bottom)
+    pix = page.get_pixmap(clip=clip_rect)
     img_bytes = pix.tobytes("png")
     b64_img = base64.b64encode(img_bytes).decode('utf-8')
     
@@ -803,9 +809,9 @@ async def extract_pdf(
                 q_text_buffer = ""
             
             if provider == "groq":
-                ai_qs, tokens = extract_with_groq(page, api_key, "questions", model_name)
+                ai_qs, tokens = extract_with_groq(page, api_key, "questions", model_name, page_top, page_bottom)
             else:
-                ai_qs, tokens = extract_with_gemini(page, api_key, "questions", model_name)
+                ai_qs, tokens = extract_with_gemini(page, api_key, "questions", model_name, page_top, page_bottom)
                 
             questions.extend(ai_qs)
             total_input_tokens += tokens["input"]
@@ -838,9 +844,9 @@ async def extract_pdf(
                 s_text_buffer = ""
                 
             if provider == "groq":
-                ai_sols, tokens = extract_with_groq(page, api_key, "solutions", model_name)
+                ai_sols, tokens = extract_with_groq(page, api_key, "solutions", model_name, page_top, page_bottom)
             else:
-                ai_sols, tokens = extract_with_gemini(page, api_key, "solutions", model_name)
+                ai_sols, tokens = extract_with_gemini(page, api_key, "solutions", model_name, page_top, page_bottom)
                 
             solutions.extend(ai_sols)
             total_input_tokens += tokens["input"]
