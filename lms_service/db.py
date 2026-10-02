@@ -68,6 +68,10 @@ def init_db():
     conn.commit()
     conn.close()
 
+    # Seed default super admin if none exists
+    if not has_super_admin():
+        create_user("Super Admin", "admin", "admin123", role="super_admin")
+
 # Password hashing helpers
 def hash_password(password: str, salt: str = None) -> tuple[str, str]:
     if not salt:
