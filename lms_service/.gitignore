@@ -1,0 +1,22 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+env/
+
+# Database (keep credentials and local data private)
+*.db
+*.sqlite3
+
+# Temporary extraction data
+temp/
+*.pdf
+*.docx
+*.xlsx
+*.zip
+
+# Environment & IDE
+.env
+.vscode/
+.idea/
