@@ -222,7 +222,11 @@ You MUST format all math using plain TeX.
 
     import fitz
     rect = page.rect
-    clip_rect = fitz.Rect(0, rect.height * page_top, rect.width, rect.height * page_bottom)
+    top_pct = max(0.0, min(float(page_top or 0), 100.0))
+    bottom_pct = max(0.0, min(float(page_bottom or 0), 100.0))
+    y0 = rect.y0 + rect.height * (top_pct / 100.0)
+    y1 = rect.y1 - rect.height * (bottom_pct / 100.0)
+    clip_rect = fitz.Rect(0, y0, rect.width, y1)
     pix = page.get_pixmap(clip=clip_rect)
     img_bytes = pix.tobytes("png")
     
@@ -265,7 +269,11 @@ def extract_with_groq(page, api_key: str, mode: str, model_name: str, page_top: 
     import fitz
     
     rect = page.rect
-    clip_rect = fitz.Rect(0, rect.height * page_top, rect.width, rect.height * page_bottom)
+    top_pct = max(0.0, min(float(page_top or 0), 100.0))
+    bottom_pct = max(0.0, min(float(page_bottom or 0), 100.0))
+    y0 = rect.y0 + rect.height * (top_pct / 100.0)
+    y1 = rect.y1 - rect.height * (bottom_pct / 100.0)
+    clip_rect = fitz.Rect(0, y0, rect.width, y1)
     pix = page.get_pixmap(clip=clip_rect)
     img_bytes = pix.tobytes("png")
     b64_img = base64.b64encode(img_bytes).decode('utf-8')
