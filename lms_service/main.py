@@ -1,6 +1,6 @@
+import re
 import asyncio
 import os
-import re
 import fitz
 import pandas as pd
 from docx import Document
@@ -167,9 +167,13 @@ You MUST format all math using plain TeX.
             
     return [], tokens
 
-def extract_with_gemini(page, api_key: str, mode: str, model_name: str, page_top: float = 0.0, page_bottom: float = 1.0):
-    client = genai.Client(api_key=api_key)
+def extract_with_gemini(page, api_key: str, mode: str, model_name: str, page_top: float = 0.0, page_bottom: float = 1.0, columns: int = 1):
+    from google import genai
+    from google.genai import types
+    import json
     
+    client = genai.Client(api_key=api_key)
+
     if mode == "questions":
         schema = types.Schema(
             type=types.Type.ARRAY,
@@ -180,41 +184,12 @@ def extract_with_gemini(page, api_key: str, mode: str, model_name: str, page_top
                     "text": types.Schema(type=types.Type.STRING),
                     "options": types.Schema(
                         type=types.Type.OBJECT,
-                        properties={
-                            "a": types.Schema(type=types.Type.STRING),
-                            "b": types.Schema(type=types.Type.STRING),
-                            "c": types.Schema(type=types.Type.STRING),
-                            "d": types.Schema(type=types.Type.STRING),
-                            "e": types.Schema(type=types.Type.STRING),
-                        }
+                        properties={k: types.Schema(type=types.Type.STRING) for k in ["a","b","c","d","e"]},
                     )
                 },
                 required=["num", "text"]
             )
         )
-        prompt = """You are a strict data extractor for an LMS. Extract all questions from this page image.
-
-CRITICAL RULES:
-1. PLAIN TEXT MATH: Do NOT use LaTeX or TeX. Write all math in clean, plain-text format. 
-   - Use parentheses for fractions (e.g., `(x + 2) / 4`).
-   - Use `^` for exponents (e.g., `x^2`) and `sqrt()` for roots.
-   - Use `*` for multiplication, NEVER use the letter `x`.
-
-2. SPACING & LAYOUT: If a question contains multiple equations, a list of statements, or multiple conclusions (like in Syllogisms), you MUST place each one on its own separate line. Use double line breaks (\\n\\n) between them so they do not collapse into a single paragraph.
-
-3. DIRECTIONS vs. PUZZLES/PASSAGES: You must distinguish between "Instructional Text" and "Puzzles":
-   - INSTRUCTIONS: Do NOT copy general instructional text (e.g., "In the following questions..." or "Mark A if...") into the question `text`.
-   - PUZZLES/PASSAGES: If a block of text is a Reading Comprehension passage, a Logic Puzzle, or a Data Set meant for a group of questions, you MUST copy that entire passage/puzzle into the `text` of EVERY SINGLE question it applies to. Separate the puzzle from the specific question using double line breaks (\\n\\n).
-
-4. MASTER OPTIONS: If an "Instructional" block provides master options (e.g., "(A) if only conclusion I follows..."), extract ONLY those option choices and put them into the `options` object for all applicable questions on that page. 
-
-5. MISSING OPTIONS: If a question is a Logical Reasoning, Syllogism, or Statement-Conclusion type and NO options are printed anywhere on the page, you MUST automatically generate the standard options:
-   "a": "If only conclusion I follows"
-   "b": "If only conclusion II follows"
-   "c": "If either conclusion I or II follows"
-   "d": "If neither conclusion I nor II follows"
-   "e": "If both conclusion I and II follow"
-"""
     else:
         schema = types.Schema(
             type=types.Type.ARRAY,
@@ -228,7 +203,31 @@ CRITICAL RULES:
                 required=["num", "correct", "explanation"]
             )
         )
-        prompt = """You are a strict data extractor and expert tutor for an LMS. Extract and rewrite all solutions/explanations from this page image into a clear, step-by-step format.
+
+    if mode == "questions":
+        prompt = lines_cache.get('gemini_q_prompt', """You are a strict data extractor for an LMS. Extract all questions from this page image.
+
+CRITICAL RULES:
+1. PLAIN TEXT MATH: Do NOT use LaTeX or TeX. Write all math in clean, plain-text format.
+   - Fractions: Always use parentheses for clarity (e.g., `(a + b) / c`).
+   - Multiplication: Use `*` or parentheses, NEVER use the algebra letter `x`.
+   - Powers & Roots: Use `^` for exponents (e.g., `y^2`) and `sqrt()` for roots.
+
+2. OPTION EXTRACTION: Extract ALL answer options exactly as printed. Do NOT skip any options.
+   - Universal Mapping: If the book uses numbers (1,2,3,4), lowercase (a,b,c,d), or roman numerals (i,ii,iii,iv), you MUST map them to standard capital letters: 1st option = "a", 2nd = "b", 3rd = "c", 4th = "d", 5th = "e".
+   - If an option is genuinely missing from the page, leave it out. Do NOT fabricate option text.
+
+3. DIRECTIONS vs PUZZLES:
+   - Standard directions (e.g. "Mark A if only conclusion I follows") are NOT questions. IGNORE them.
+   - Passages, puzzles, or data sets (e.g. seating arrangements, series) MUST be included in the `text` field of EVERY question that depends on them.
+
+Return a JSON array of objects. Each object must have:
+- "num": the question number as a string
+- "text": the full question text
+- "options": an object with keys "a", "b", "c", "d", etc.
+""")
+    else:
+        prompt = lines_cache.get('gemini_s_prompt', """You are a strict data extractor and expert tutor for an LMS. Extract and rewrite all solutions/explanations from this page image into a clear, step-by-step format.
 
 CRITICAL RULES:
 1. PLAIN TEXT MATH: Do NOT use LaTeX or TeX. Write all math in clean, plain-text format.
@@ -245,7 +244,7 @@ CRITICAL RULES:
 4. FINAL ANSWER: Always state the final conclusion clearly on the very last line of the explanation (e.g., "Final Answer: Option B, (x : y) = 2 : 1").
 
 5. CLEAN EXPLANATIONS: Do not include unnecessary headers from the book. If the book's solution is missing steps, write it out clearly. If the text explains a diagram or puzzle, capture the logical explanation perfectly in text.
-"""
+""")
 
     import fitz
     rect = page.rect
@@ -253,46 +252,55 @@ CRITICAL RULES:
     bottom_pct = max(0.0, min(float(page_bottom or 0), 100.0))
     y0 = rect.y0 + rect.height * (top_pct / 100.0)
     y1 = rect.y1 - rect.height * (bottom_pct / 100.0)
-    clip_rect = fitz.Rect(0, y0, rect.width, y1)
-    pix = page.get_pixmap(clip=clip_rect)
-    img_bytes = pix.tobytes("png")
     
-    tokens = {"input": 0, "output": 0, "total": 0}
-    try:
-        response = client.models.generate_content(
-            model=model_name,
-            contents=[
-                types.Part.from_bytes(data=img_bytes, mime_type='image/png'),
-                prompt
-            ],
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                response_schema=schema,
-                temperature=0.0
-            )
-        )
+    # Build list of clip rects (1 for single-column, 2 for 2-column)
+    if int(columns or 1) == 2:
+        mid_x = rect.x0 + rect.width * 0.5
+        clip_rects = [
+            fitz.Rect(rect.x0, y0, mid_x, y1),      # Left half
+            fitz.Rect(mid_x, y0, rect.x1, y1),       # Right half
+        ]
+    else:
+        clip_rects = [fitz.Rect(0, y0, rect.width, y1)]
+    
+    all_results = []
+    total_tokens = {"input": 0, "output": 0, "total": 0}
+    
+    for clip_rect in clip_rects:
+        pix = page.get_pixmap(clip=clip_rect, dpi=150)
+        img_bytes = pix.tobytes("png")
         
-        # Capture exact token usage from Google's response metadata
-        if hasattr(response, 'usage_metadata') and response.usage_metadata:
-            tokens["input"] = response.usage_metadata.prompt_token_count or 0
-            tokens["output"] = response.usage_metadata.candidates_token_count or 0
-            tokens["total"] = response.usage_metadata.total_token_count or 0
+        try:
+            response = client.models.generate_content(
+                model=model_name,
+                contents=[
+                    types.Part.from_bytes(data=img_bytes, mime_type='image/png'),
+                    prompt
+                ],
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    response_schema=schema,
+                    temperature=0.0
+                )
+            )
             
-        data = json.loads(response.text)
-        return sanitize_dict(data), tokens
-    except Exception as e:
-        print(f"Gemini API Error: {e}")
-        return [], tokens
+            if hasattr(response, 'usage_metadata') and response.usage_metadata:
+                total_tokens["input"] += response.usage_metadata.prompt_token_count or 0
+                total_tokens["output"] += response.usage_metadata.candidates_token_count or 0
+                total_tokens["total"] += response.usage_metadata.total_token_count or 0
+                
+            data = json.loads(response.text)
+            all_results.extend(sanitize_dict(data))
+        except Exception as e:
+            print(f"Gemini API Error: {e}")
+    
+    return all_results, total_tokens
 
-# ---------------------------------------------------------
-# GROQ VISION EXTRACTOR
-# ---------------------------------------------------------
-def extract_with_groq(page, api_key: str, mode: str, model_name: str, page_top: float = 0.0, page_bottom: float = 1.0):
+def extract_with_groq(page, api_key: str, mode: str, model_name: str, page_top: float = 0.0, page_bottom: float = 1.0, columns: int = 1):
     import base64
     import json
     import httpx
     import time
-    import re
     import fitz
     
     rect = page.rect
@@ -300,10 +308,16 @@ def extract_with_groq(page, api_key: str, mode: str, model_name: str, page_top: 
     bottom_pct = max(0.0, min(float(page_bottom or 0), 100.0))
     y0 = rect.y0 + rect.height * (top_pct / 100.0)
     y1 = rect.y1 - rect.height * (bottom_pct / 100.0)
-    clip_rect = fitz.Rect(0, y0, rect.width, y1)
-    pix = page.get_pixmap(clip=clip_rect)
-    img_bytes = pix.tobytes("png")
-    b64_img = base64.b64encode(img_bytes).decode('utf-8')
+    
+    # Build list of clip rects (1 for single-column, 2 for 2-column)
+    if int(columns or 1) == 2:
+        mid_x = rect.x0 + rect.width * 0.5
+        clip_rects = [
+            fitz.Rect(rect.x0, y0, mid_x, y1),
+            fitz.Rect(mid_x, y0, rect.x1, y1),
+        ]
+    else:
+        clip_rects = [fitz.Rect(0, y0, rect.width, y1)]
     
     if mode == "questions":
         prompt = """You are a strict data extractor for an LMS. Extract all questions from this page image.
@@ -366,74 +380,71 @@ Each object must have:
         "Content-Type": "application/json"
     }
     
-    payload = {
-        "model": model_name,
-        "messages": [
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "text",
-                        "text": prompt
-                    },
-                    {
-                        "type": "image_url",
-                        "image_url": {
-                            "url": f"data:image/png;base64,{b64_img}"
-                        }
-                    }
-                ]
-            }
-        ],
-        "response_format": {"type": "json_object"},
-        "temperature": 0.01
-    }
+    all_results = []
+    total_tokens = {"input": 0, "output": 0, "total": 0}
     
-    tokens = {"input": 0, "output": 0, "total": 0}
-    max_retries = 6
-    
-    for attempt in range(max_retries):
-        try:
-            if attempt > 0:
-                backoff_time = 2 ** attempt  # 2, 4, 8, 16, 32 seconds
-                print(f"Groq API retry {attempt}/{max_retries - 1}. Waiting {backoff_time}s...")
-                time.sleep(backoff_time)
+    for clip_rect in clip_rects:
+        pix = page.get_pixmap(clip=clip_rect, dpi=150)
+        img_bytes = pix.tobytes("png")
+        b64_img = base64.b64encode(img_bytes).decode('utf-8')
+        
+        payload = {
+            "model": model_name,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": prompt},
+                        {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{b64_img}"}}
+                    ]
+                }
+            ],
+            "response_format": {"type": "json_object"},
+            "temperature": 0.01
+        }
+        
+        max_retries = 6
+        for attempt in range(max_retries):
+            try:
+                if attempt > 0:
+                    backoff_time = 2 ** attempt
+                    print(f"Groq API retry {attempt}/{max_retries - 1}. Waiting {backoff_time}s...")
+                    time.sleep(backoff_time)
+                    
+                with httpx.Client(timeout=120.0) as client:
+                    resp = client.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=payload)
+                    
+                resp.raise_for_status()
+                data_json = resp.json()
                 
-            with httpx.Client(timeout=120.0) as client:
-                resp = client.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=payload)
+                usage = data_json.get("usage", {})
+                total_tokens["input"] += usage.get("prompt_tokens", 0)
+                total_tokens["output"] += usage.get("completion_tokens", 0)
+                total_tokens["total"] += usage.get("total_tokens", 0)
                 
-            resp.raise_for_status()
-            data_json = resp.json()
-            
-            usage = data_json.get("usage", {})
-            tokens["input"] = usage.get("prompt_tokens", 0)
-            tokens["output"] = usage.get("completion_tokens", 0)
-            tokens["total"] = usage.get("total_tokens", 0)
-            
-            content_str = data_json["choices"][0]["message"]["content"]
-            
-            match = re.search(r'```(?:json)?(.*?)```', content_str, re.DOTALL)
-            if match:
-                content_str = match.group(1).strip()
+                content_str = data_json["choices"][0]["message"]["content"]
                 
-            parsed = json.loads(content_str)
-            return sanitize_dict(parsed.get("data", [])), tokens
+                match = re.search(r'```(?:json)?(.*?)```', content_str, re.DOTALL)
+                if match:
+                    content_str = match.group(1).strip()
+                    
+                parsed = json.loads(content_str)
+                all_results.extend(sanitize_dict(parsed.get("data", [])))
+                break  # Success, move to next clip_rect
+                
+            except Exception as e:
+                err_str = str(e).lower()
+                if "429" in err_str or "quota" in err_str or "too many" in err_str:
+                    if attempt < max_retries - 1:
+                        print(f"Groq Rate limit hit (Attempt {attempt+1}). Retrying...")
+                        continue
+                print(f"Groq API Error: {e}")
+                if hasattr(e, 'response'):
+                    print("Response:", e.response.text)
+                break  # Non-retryable error, skip this clip
             
-        except Exception as e:
-            err_str = str(e).lower()
-            if "429" in err_str or "quota" in err_str or "too many" in err_str:
-                if attempt < max_retries - 1:
-                    print(f"Groq Rate limit hit (Attempt {attempt+1}). Retrying...")
-                    continue
-            print(f"Groq API Error: {e}")
-            if hasattr(e, 'response'):
-                print("Response:", e.response.text)
-            
-    return [], tokens
+    return all_results, total_tokens
 
-# ---------------------------------------------------------
-# PURE PYTHON HELPERS
-# ---------------------------------------------------------
 def is_complex_content(page):
     if len(page.get_images()) > 0 or len(page.get_drawings()) > 0:
         return True
@@ -897,11 +908,8 @@ async def extract_pdf(
                 questions.extend(parse_questions_python(q_text_buffer))
                 q_text_buffer = ""
             
-            if provider == "groq":
-                ai_qs, tokens = extract_with_groq(page, api_key, "questions", model_name, page_top, page_bottom)
-            else:
-                ai_qs, tokens = extract_with_gemini(page, api_key, "questions", model_name, page_top, page_bottom)
-                
+            ai_extract_fn = extract_with_groq if provider == "groq" else extract_with_gemini
+            ai_qs, tokens = ai_extract_fn(page, api_key, "questions", model_name, page_top, page_bottom, columns=int(columns or 1))
             questions.extend(ai_qs)
             total_input_tokens += tokens["input"]
             total_output_tokens += tokens["output"]
@@ -937,11 +945,8 @@ async def extract_pdf(
                 solutions.extend(parse_solutions_python(s_text_buffer))
                 s_text_buffer = ""
                 
-            if provider == "groq":
-                ai_sols, tokens = extract_with_groq(page, api_key, "solutions", model_name, page_top, page_bottom)
-            else:
-                ai_sols, tokens = extract_with_gemini(page, api_key, "solutions", model_name, page_top, page_bottom)
-                
+            ai_extract_fn = extract_with_groq if provider == "groq" else extract_with_gemini
+            ai_sols, tokens = ai_extract_fn(page, api_key, "solutions", model_name, page_top, page_bottom, columns=int(columns or 1))
             solutions.extend(ai_sols)
             total_input_tokens += tokens["input"]
             total_output_tokens += tokens["output"]
@@ -992,14 +997,24 @@ async def extract_pdf(
             merged_solutions.append(s)
     solutions = merged_solutions
     
-    # 3. Filter to only the expected index range
+    # 3. Filter and Sort numerically
     expected_q_nums = set(str(i) for i in range(q_index_start, q_index_end + 1))
     expected_s_nums = set(str(i) for i in range(s_index_start, s_index_end + 1))
+    
     questions = [q for q in questions if q['num'] in expected_q_nums]
     solutions = [s for s in solutions if s['num'] in expected_s_nums]
     
+    def safe_int(val):
+        try:
+            return int(val)
+        except ValueError:
+            return 999999
+
+    questions.sort(key=lambda q: safe_int(q['num']))
+    solutions.sort(key=lambda s: safe_int(s['num']))
+
+    
     # 4. Build the mapping
-    import re
     def normalize_num(n):
         return re.sub(r'[^0-9]', '', str(n))
         
@@ -1076,7 +1091,6 @@ async def extract_pdf(
         
         # Clean up correct answer string (e.g. "Option B" -> "B")
         if correct_ans:
-            import re
             match = re.search(r'[A-Ea-e]', correct_ans)
             if match:
                 correct_ans = match.group(0).upper()
