@@ -49,6 +49,7 @@ export default function ExtractorPage() {
         setFile(e.target.files[0]);
         setValidationResult(null);
         setDownloadFiles(null);
+        setJobProgress(null);
     };
 
     const loadPagePreview = async (pageNum) => {
@@ -162,7 +163,10 @@ export default function ExtractorPage() {
             clearInterval(pollInterval);
             if (!res.ok) throw new Error(data.detail || "Extraction failed.");
             setDownloadFiles(data.files);
-            setJobProgress(null);
+            setJobProgress(prev => {
+                const tot = prev?.total || 1;
+                return { status: "done", current: tot, total: tot, phase: "Complete!" };
+            });
         } catch (err) {
             clearInterval(pollInterval);
             setJobProgress(null);
@@ -190,9 +194,9 @@ export default function ExtractorPage() {
     };
 
     return (
-        <div className="w-full max-w-5xl grid grid-cols-1 md:grid-cols-12 gap-6 pb-12 items-start">
+        <div className="w-full max-w-[1400px] w-full grid grid-cols-1 lg:grid-cols-12 gap-6 pb-12 items-start">
             {/* Left Panel */}
-            <div className="col-span-5 flex flex-col gap-4">
+            <div className="col-span-1 lg:col-span-3 flex flex-col gap-4">
                 
                 {/* Upload Block */}
                 <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm shrink-0">
@@ -243,7 +247,7 @@ export default function ExtractorPage() {
             </div>
 
             {/* Right Panel */}
-            <div className="col-span-7 flex flex-col gap-4">
+            <div className="col-span-1 lg:col-span-5 flex flex-col gap-4">
                 
                 {/* Preflight Ranges */}
                 <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm shrink-0">
@@ -357,9 +361,12 @@ export default function ExtractorPage() {
                         {isExtracting ? <span><i className="fa-solid fa-circle-notch fa-spin mr-2"></i> Processing &amp; Parsing...</span> : <span><i className="fa-solid fa-wand-magic-sparkles mr-2"></i> Process Document</span>}
                     </button>
                 </div>
+            </div>
 
+            {/* Right Panel (Progress & Downloads) */}
+            <div className="col-span-1 lg:col-span-4 flex flex-col gap-4">
                 {/* Progress Bar */}
-                {isExtracting && jobProgress && jobProgress.total > 0 && (
+                {jobProgress && jobProgress.total > 0 && (
                     <div className="bg-white border border-indigo-100 rounded-xl p-4 shadow-sm mt-4 animate-fade-in">
                         <div className="flex justify-between items-end mb-2">
                             <div>
