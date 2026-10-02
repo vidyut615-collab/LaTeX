@@ -28,6 +28,7 @@ export default function ExtractorPage() {
     const [columns, setColumns] = useState(1);
     const [showMarginModal, setShowMarginModal] = useState(false);
     const [previewData, setPreviewData] = useState(null);
+    const [previewDataEnd, setPreviewDataEnd] = useState(null);
     const [loadingPreview, setLoadingPreview] = useState(false);
     const [draggingLine, setDraggingLine] = useState(null);
     const [subject, setSubject] = useState('Maths > Quantitative > Average');
@@ -52,32 +53,47 @@ export default function ExtractorPage() {
         setJobProgress(null);
     };
 
-    const loadPagePreview = async (pageNum) => {
+    const loadPagePreview = async (pageNum, pageNumEnd = null) => {
         if (!file) return;
         setLoadingPreview(true);
         try {
             const formData = new FormData();
             formData.append("file", file);
-            formData.append("page_num", pageNum || qStart);
-            const res = await fetch(`${API_URL}/api/extract/preview-page`, {
-                method: "POST",
-                headers: authHeaders(),
-                body: formData
-            });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.detail || "Failed to load page preview");
-            setPreviewData(data);
+            formData.append("page_num", pageNum);
+            const p1 = fetch(`${API_URL}/api/extract/preview-page`, {
+                method: "POST", headers: authHeaders(), body: formData
+            }).then(r => r.json());
+            
+            let p2 = null;
+            if (pageNumEnd) {
+                const fd2 = new FormData();
+                fd2.append("file", file);
+                fd2.append("page_num", pageNumEnd);
+                p2 = fetch(`${API_URL}/api/extract/preview-page`, {
+                    method: "POST", headers: authHeaders(), body: fd2
+                }).then(r => r.json());
+            }
+
+            const [data1, data2] = await Promise.all([p1, p2]);
+            if (data1.detail) throw new Error(data1.detail);
+            setPreviewData(data1);
+            if (data2) {
+                if (data2.detail) throw new Error(data2.detail);
+                setPreviewDataEnd(data2);
+            } else {
+                setPreviewDataEnd(null);
+            }
         } catch (err) {
             alert("Preview Error: " + err.message);
         }
         setLoadingPreview(false);
     };
 
-    const openMarginModal = (mode = 'global', pageNum = null) => {
+    const openMarginModal = (mode = 'global', startPage = null, endPage = null) => {
         if (!file) return alert("Please upload a PDF file first.");
         setActiveCropMode(mode);
         setShowMarginModal(true);
-        loadPagePreview(pageNum || qStart);
+        loadPagePreview(startPage || qStart, endPage);
     };
 
     const runPreFlightCheck = async () => {
@@ -263,14 +279,13 @@ export default function ExtractorPage() {
                                 <div className="flex-1">
                                     <label className="text-[10px] text-slate-500">From Page</label>
                                     <input type="number" value={qStart} onChange={e=>setQStart(Number(e.target.value))} className="w-full border border-slate-200 bg-slate-50 rounded p-1.5 text-sm" />
-                                    <button onClick={() => openMarginModal('q_start', qStart)} className="mt-1 w-full text-[10px] py-1 border border-blue-200 rounded text-blue-600 hover:bg-blue-50 transition"><i className="fa-solid fa-crop-simple"></i> Set Start Line</button>
                                 </div>
                                 <div className="flex-1">
                                     <label className="text-[10px] text-slate-500">To Page</label>
                                     <input type="number" value={qEnd} onChange={e=>setQEnd(Number(e.target.value))} className="w-full border border-slate-200 bg-slate-50 rounded p-1.5 text-sm" />
-                                    <button onClick={() => openMarginModal('q_end', qEnd)} className="mt-1 w-full text-[10px] py-1 border border-blue-200 rounded text-blue-600 hover:bg-blue-50 transition"><i className="fa-solid fa-crop-simple"></i> Set End Line</button>
                                 </div>
                             </div>
+                            <button onClick={() => openMarginModal('q_margins', qStart, qEnd)} className="mt-2 w-full text-[10px] py-1.5 border border-blue-200 rounded text-blue-600 hover:bg-blue-50 transition font-medium shadow-sm"><i className="fa-solid fa-crop-simple mr-1"></i> Set Boundaries (Start & End)</button>
                         </div>
                         <div>
                             <p className="text-[10px] font-bold text-green-600 uppercase mb-1.5"><i className="fa-solid fa-check-circle mr-1"></i>Solution Pages</p>
@@ -278,14 +293,13 @@ export default function ExtractorPage() {
                                 <div className="flex-1">
                                     <label className="text-[10px] text-slate-500">From Page</label>
                                     <input type="number" value={sStart} onChange={e=>setSStart(Number(e.target.value))} className="w-full border border-slate-200 bg-slate-50 rounded p-1.5 text-sm" />
-                                    <button onClick={() => openMarginModal('s_start', sStart)} className="mt-1 w-full text-[10px] py-1 border border-green-200 rounded text-green-600 hover:bg-green-50 transition"><i className="fa-solid fa-crop-simple"></i> Set Start Line</button>
                                 </div>
                                 <div className="flex-1">
                                     <label className="text-[10px] text-slate-500">To Page</label>
                                     <input type="number" value={sEnd} onChange={e=>setSEnd(Number(e.target.value))} className="w-full border border-slate-200 bg-slate-50 rounded p-1.5 text-sm" />
-                                    <button onClick={() => openMarginModal('s_end', sEnd)} className="mt-1 w-full text-[10px] py-1 border border-green-200 rounded text-green-600 hover:bg-green-50 transition"><i className="fa-solid fa-crop-simple"></i> Set End Line</button>
                                 </div>
                             </div>
+                            <button onClick={() => openMarginModal('s_margins', sStart, sEnd)} className="mt-2 w-full text-[10px] py-1.5 border border-green-200 rounded text-green-600 hover:bg-green-50 transition font-medium shadow-sm"><i className="fa-solid fa-crop-simple mr-1"></i> Set Boundaries (Start & End)</button>
                         </div>
                     </div>
 
@@ -420,10 +434,10 @@ export default function ExtractorPage() {
                                 <div>
                                     <h3 className="text-base font-bold text-slate-800">
                                         {activeCropMode === 'global' ? 'Set Global Margins & Layout' :
-                                         activeCropMode === 'q_start' ? 'Set Questions Start Boundary' :
-                                         activeCropMode === 'q_end' ? 'Set Questions End Boundary' :
-                                         activeCropMode === 's_start' ? 'Set Solutions Start Boundary' :
-                                         'Set Solutions End Boundary'}
+                                         activeCropMode === 'q_margins' ? 'Set Questions Boundaries (Start & End)' :
+                                         
+                                         activeCropMode === 's_margins' ? 'Set Solutions Boundaries (Start & End)' :
+                                         'Unknown'}
                                     </h3>
                                     <p className="text-xs text-slate-500">
                                         {activeCropMode === 'global' ? 'Drag the red lines to exclude headers & footers on all pages.' :
@@ -508,22 +522,29 @@ export default function ExtractorPage() {
                                             </button>
                                         </>
                                     ) : (
-                                        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-center">
+                                                                                <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-center">
                                             <i className="fa-solid fa-crop-simple text-3xl text-blue-400 mb-3 block"></i>
-                                            <h4 className="text-sm font-bold text-blue-800 mb-2">Physical Marker</h4>
+                                            <h4 className="text-sm font-bold text-blue-800 mb-2">Physical Markers</h4>
                                             <p className="text-xs text-blue-600 leading-relaxed mb-4">
-                                                Drag the red handle on the preview image to set the exact visual cut-off line.
+                                                Drag the red handle on the left image to set the Start Boundary (Top), and on the right image to set the End Boundary (Bottom).
                                             </p>
-                                            <div className="bg-white p-2 rounded shadow-sm border border-blue-100 flex items-center justify-between">
-                                                <span className="text-[10px] font-bold text-slate-500 uppercase">Crop Line</span>
-                                                <span className="text-xs font-black text-blue-700">
-                                                    {activeCropMode === 'q_start' ? qStartTop :
-                                                     activeCropMode === 'q_end' ? qEndBottom :
-                                                     activeCropMode === 's_start' ? sStartTop :
-                                                     sEndBottom}%
-                                                </span>
+                                            <div className="flex flex-col gap-2">
+                                                <div className="bg-white p-2 rounded shadow-sm border border-blue-100 flex items-center justify-between">
+                                                    <span className="text-[10px] font-bold text-slate-500 uppercase">Top Boundary</span>
+                                                    <span className="text-xs font-black text-blue-700">
+                                                        {activeCropMode === 'q_margins' ? qStartTop : sStartTop}%
+                                                    </span>
+                                                </div>
+                                                <div className="bg-white p-2 rounded shadow-sm border border-blue-100 flex items-center justify-between">
+                                                    <span className="text-[10px] font-bold text-slate-500 uppercase">Bottom Boundary</span>
+                                                    <span className="text-xs font-black text-blue-700">
+                                                        {activeCropMode === 'q_margins' ? qEndBottom : sEndBottom}%
+                                                    </span>
+                                                </div>
                                             </div>
                                         </div>
+
+                                        
                                     )}
 
                                 </div>
@@ -546,55 +567,148 @@ export default function ExtractorPage() {
                                         <span className="text-xs font-bold">Rendering page preview...</span>
                                     </div>
                                 ) : previewData ? (
-                                    <div className="flex flex-col items-center">
-                                        <div className="text-[11px] font-semibold text-slate-500 mb-2">
-                                            Previewing Page {previewData.page_num} of {previewData.total_pages} (Drag the handles on the image or use the sliders)
-                                        </div>
+                                                                        <div className="flex flex-row gap-12 items-start justify-center w-full">
                                         
-                                        {/* Interactive Page Container */}
-                                        <div 
-                                            onMouseMove={(e) => {
-                                                if (!draggingLine) return;
-                                                const rect = e.currentTarget.getBoundingClientRect();
-                                                const y = e.clientY - rect.top;
-                                                const pct = parseFloat(((y / rect.height) * 100).toFixed(1));
-                                                
-                                                if (draggingLine === 'top') {
-                                                    const val = Math.max(0, Math.min(pct, 100));
-                                                    if (activeCropMode === 'q_start') setQStartTop(val);
-                                                    else if (activeCropMode === 's_start') setSStartTop(val);
-                                                    else setTopMargin(Math.max(0, Math.min(val, 40)));
-                                                } else if (draggingLine === 'bottom') {
-                                                    const bPct = parseFloat((((rect.height - y) / rect.height) * 100).toFixed(1));
-                                                    const val = Math.max(0, Math.min(bPct, 100));
-                                                    if (activeCropMode === 'q_end') setQEndBottom(val);
-                                                    else if (activeCropMode === 's_end') setSEndBottom(val);
-                                                    else setBottomMargin(Math.max(0, Math.min(val, 40)));
-                                                }
-                                            }}
-                                            onMouseUp={() => setDraggingLine(null)}
-                                            onMouseLeave={() => setDraggingLine(null)}
-                                            className="relative shadow-2xl border border-slate-300 rounded overflow-hidden select-none bg-white max-h-[70vh]">
+                                        {/* LEFT / SINGLE IMAGE */}
+                                        <div className="flex flex-col items-center">
+                                            <div className="text-[11px] font-semibold text-slate-500 mb-2">
+                                                Previewing Page {previewData.page_num} of {previewData.total_pages} {['q_margins', 's_margins'].includes(activeCropMode) ? "(Start Boundary - Adjust Top)" : "(Drag the handles on the image or use the sliders)"}
+                                            </div>
                                             
-                                            <img 
-                                                src={previewData.image} 
-                                                alt="Page Preview" 
-                                                className="max-h-[70vh] object-contain pointer-events-none block" />
+                                            <div 
+                                                onMouseMove={(e) => {
+                                                    if (!draggingLine) return;
+                                                    const rect = e.currentTarget.getBoundingClientRect();
+                                                    const y = e.clientY - rect.top;
+                                                    const pct = parseFloat(((y / rect.height) * 100).toFixed(1));
+                                                    
+                                                    if (draggingLine === 'top') {
+                                                        const val = Math.max(0, Math.min(pct, 100));
+                                                        if (activeCropMode === 'q_margins') setQStartTop(val);
+                                                        else if (activeCropMode === 's_margins') setSStartTop(val);
+                                                        else setTopMargin(Math.max(0, Math.min(val, 40)));
+                                                    } else if (draggingLine === 'bottom') {
+                                                        const bPct = parseFloat((((rect.height - y) / rect.height) * 100).toFixed(1));
+                                                        const val = Math.max(0, Math.min(bPct, 100));
+                                                        setBottomMargin(Math.max(0, Math.min(val, 40)));
+                                                    }
+                                                }}
+                                                onMouseUp={() => setDraggingLine(null)}
+                                                onMouseLeave={() => setDraggingLine(null)}
+                                                className="relative shadow-2xl border border-slate-300 rounded overflow-hidden select-none bg-white max-h-[70vh]">
+                                                
+                                                <img 
+                                                    src={previewData.image} 
+                                                    alt="Page Preview Start" 
+                                                    className="max-h-[70vh] object-contain pointer-events-none block" />
 
-                                            {/* Dynamic Top Margin */}
-                                            {['global', 'q_start', 's_start'].includes(activeCropMode) && (
-                                                <>
-                                                    <div 
-                                                        style={{ top: 0, height: `${activeCropMode === 'q_start' ? qStartTop : activeCropMode === 's_start' ? sStartTop : topMargin}%`, left: 0, right: 0 }}
-                                                        className="absolute bg-rose-500/25 border-b-2 border-rose-500 pointer-events-none flex items-end justify-center pb-1 transition-[height] duration-75">
-                                                    </div>
-                                                    <div 
-                                                        onMouseDown={(e) => { e.preventDefault(); setDraggingLine('top'); }}
-                                                        style={{ top: `${activeCropMode === 'q_start' ? qStartTop : activeCropMode === 's_start' ? sStartTop : topMargin}%`, transform: 'translateY(-50%)' }}
-                                                        className="absolute left-0 right-0 h-6 cursor-ns-resize flex items-center justify-center z-20 group">
+                                                {/* Dynamic Top Margin */}
+                                                {['global', 'q_margins', 's_margins'].includes(activeCropMode) && (
+                                                    <>
+                                                        <div 
+                                                            style={{ top: 0, height: `${activeCropMode === 'q_margins' ? qStartTop : activeCropMode === 's_margins' ? sStartTop : topMargin}%`, left: 0, right: 0 }}
+                                                            className="absolute bg-rose-500/25 border-b-2 border-rose-500 pointer-events-none flex items-end justify-center pb-1 transition-[height] duration-75">
+                                                        </div>
+                                                        <div 
+                                                            onMouseDown={(e) => { e.preventDefault(); setDraggingLine('top'); }}
+                                                            style={{ top: `${activeCropMode === 'q_margins' ? qStartTop : activeCropMode === 's_margins' ? sStartTop : topMargin}%`, transform: 'translateY(-50%)' }}
+                                                            className="absolute left-0 right-0 h-6 cursor-ns-resize flex items-center justify-center z-20 group">
+                                                            <div className="w-24 h-2.5 bg-rose-600 hover:bg-rose-700 rounded-full shadow-md border-2 border-white flex items-center justify-center transition">
+                                                                <div className="w-6 h-0.5 bg-white rounded"></div>
+                                                            </div>
+                                                        </div>
+                                                    </>
+                                                )}
+
+                                                {/* Dynamic Bottom Margin (Global Only on this side) */}
+                                                {['global'].includes(activeCropMode) && (
+                                                    <>
+                                                        <div 
+                                                            style={{ bottom: 0, height: `${bottomMargin}%`, left: 0, right: 0 }}
+                                                            className="absolute bg-rose-500/25 border-t-2 border-rose-500 pointer-events-none flex items-start justify-center pt-1 transition-[height] duration-75">
+                                                        </div>
+                                                        <div 
+                                                            onMouseDown={(e) => { e.preventDefault(); setDraggingLine('bottom'); }}
+                                                            style={{ bottom: `${bottomMargin}%`, transform: 'translateY(50%)' }}
+                                                            className="absolute left-0 right-0 h-6 cursor-ns-resize flex items-center justify-center z-20 group">
                                                         <div className="w-24 h-2.5 bg-rose-600 hover:bg-rose-700 rounded-full shadow-md border-2 border-white flex items-center justify-center transition">
                                                             <div className="w-6 h-0.5 bg-white rounded"></div>
                                                         </div>
+                                                    </div>
+                                                    </>
+                                                )}
+                                                
+                                                {/* 2-Column Vertical Dotted Guide Line */}
+                                                {columns === 2 && (
+                                                    <div className="absolute top-0 bottom-0 left-1/2 w-0 border-l-2 border-dashed border-indigo-500 pointer-events-none z-10 flex flex-col justify-between py-6">
+                                                        <span className="bg-indigo-600 text-white text-[9px] font-bold px-2 py-0.5 rounded shadow -translate-x-1/2 self-center">
+                                                            Col 1 (Left) | Col 2 (Right)
+                                                        </span>
+                                                        <span className="bg-indigo-600 text-white text-[9px] font-bold px-2 py-0.5 rounded shadow -translate-x-1/2 self-center">
+                                                            50% Center Split
+                                                        </span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        {/* RIGHT IMAGE (Only if q_margins or s_margins AND previewDataEnd exists) */}
+                                        {['q_margins', 's_margins'].includes(activeCropMode) && previewDataEnd && (
+                                            <div className="flex flex-col items-center">
+                                                <div className="text-[11px] font-semibold text-slate-500 mb-2">
+                                                    Previewing Page {previewDataEnd.page_num} of {previewDataEnd.total_pages} (End Boundary - Adjust Bottom)
+                                                </div>
+                                                
+                                                <div 
+                                                    onMouseMove={(e) => {
+                                                        if (!draggingLine) return;
+                                                        const rect = e.currentTarget.getBoundingClientRect();
+                                                        const y = e.clientY - rect.top;
+                                                        
+                                                        if (draggingLine === 'bottom') {
+                                                            const bPct = parseFloat((((rect.height - y) / rect.height) * 100).toFixed(1));
+                                                            const val = Math.max(0, Math.min(bPct, 100));
+                                                            if (activeCropMode === 'q_margins') setQEndBottom(val);
+                                                            else if (activeCropMode === 's_margins') setSEndBottom(val);
+                                                        }
+                                                    }}
+                                                    onMouseUp={() => setDraggingLine(null)}
+                                                    onMouseLeave={() => setDraggingLine(null)}
+                                                    className="relative shadow-2xl border border-slate-300 rounded overflow-hidden select-none bg-white max-h-[70vh]">
+                                                    
+                                                    <img 
+                                                        src={previewDataEnd.image} 
+                                                        alt="Page Preview End" 
+                                                        className="max-h-[70vh] object-contain pointer-events-none block" />
+
+                                                    {/* Dynamic Bottom Margin */}
+                                                    <>
+                                                        <div 
+                                                            style={{ bottom: 0, height: `${activeCropMode === 'q_margins' ? qEndBottom : sEndBottom}%`, left: 0, right: 0 }}
+                                                            className="absolute bg-rose-500/25 border-t-2 border-rose-500 pointer-events-none flex items-start justify-center pt-1 transition-[height] duration-75">
+                                                        </div>
+                                                        <div 
+                                                            onMouseDown={(e) => { e.preventDefault(); setDraggingLine('bottom'); }}
+                                                            style={{ bottom: `${activeCropMode === 'q_margins' ? qEndBottom : sEndBottom}%`, transform: 'translateY(50%)' }}
+                                                            className="absolute left-0 right-0 h-6 cursor-ns-resize flex items-center justify-center z-20 group">
+                                                        <div className="w-24 h-2.5 bg-rose-600 hover:bg-rose-700 rounded-full shadow-md border-2 border-white flex items-center justify-center transition">
+                                                            <div className="w-6 h-0.5 bg-white rounded"></div>
+                                                        </div>
+                                                    </div>
+                                                    </>
+
+                                                    {/* 2-Column Vertical Dotted Guide Line */}
+                                                    {columns === 2 && (
+                                                        <div className="absolute top-0 bottom-0 left-1/2 w-0 border-l-2 border-dashed border-indigo-500 pointer-events-none z-10 flex flex-col justify-between py-6">
+                                                            <span className="bg-indigo-600 text-white text-[9px] font-bold px-2 py-0.5 rounded shadow -translate-x-1/2 self-center">
+                                                                Col 1 (Left) | Col 2 (Right)
+                                                            </span>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
                                                     </div>
                                                 </>
                                             )}
