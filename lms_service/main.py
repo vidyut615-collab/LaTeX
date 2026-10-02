@@ -371,7 +371,14 @@ CRITICAL RULES:
 5. FINAL ANSWER: Always state the final conclusion clearly on the very last line of the explanation (e.g., "Final Answer: Option B").
 
 6. CLEAN EXPLANATIONS: Do not include unnecessary headers from the book. If the text explains a diagram or puzzle, capture the logical explanation perfectly in text, but do not invent extra mathematical steps that aren't printed on the page.
+
+You MUST return a JSON object with a single key "data", which contains an array of objects.
+Each object must have:
+- "num" (string): The solution number.
+- "correct" (string): The correct option letter (A, B, C, D, E) or blank "" if genuinely missing.
+- "explanation" (string): The explanation text exactly as transcribed.
 """
+
 
     headers = {
         "Authorization": f"Bearer {api_key}",
