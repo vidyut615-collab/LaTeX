@@ -709,42 +709,6 @@ export default function ExtractorPage() {
                                             </div>
                                         )}
                                     </div>
-                                                    </div>
-                                                </>
-                                            )}
-
-                                            {/* Dynamic Bottom Margin */}
-                                            {['global', 'q_end', 's_end'].includes(activeCropMode) && (
-                                                <>
-                                                    <div 
-                                                        style={{ bottom: 0, height: `${activeCropMode === 'q_end' ? qEndBottom : activeCropMode === 's_end' ? sEndBottom : bottomMargin}%`, left: 0, right: 0 }}
-                                                        className="absolute bg-rose-500/25 border-t-2 border-rose-500 pointer-events-none flex items-start justify-center pt-1 transition-[height] duration-75">
-                                                    </div>
-                                                    <div 
-                                                        onMouseDown={(e) => { e.preventDefault(); setDraggingLine('bottom'); }}
-                                                        style={{ bottom: `${activeCropMode === 'q_end' ? qEndBottom : activeCropMode === 's_end' ? sEndBottom : bottomMargin}%`, transform: 'translateY(50%)' }}
-                                                        className="absolute left-0 right-0 h-6 cursor-ns-resize flex items-center justify-center z-20 group">
-                                                    <div className="w-24 h-2.5 bg-rose-600 hover:bg-rose-700 rounded-full shadow-md border-2 border-white flex items-center justify-center transition">
-                                                        <div className="w-6 h-0.5 bg-white rounded"></div>
-                                                    </div>
-                                                </div>
-                                                </>
-                                            )}
-
-                                            {/* 2-Column Vertical Dotted Guide Line */}
-                                            {columns === 2 && (
-                                                <div className="absolute top-0 bottom-0 left-1/2 w-0 border-l-2 border-dashed border-indigo-500 pointer-events-none z-10 flex flex-col justify-between py-6">
-                                                    <span className="bg-indigo-600 text-white text-[9px] font-bold px-2 py-0.5 rounded shadow -translate-x-1/2 self-center">
-                                                        Col 1 (Left) | Col 2 (Right)
-                                                    </span>
-                                                    <span className="bg-indigo-600 text-white text-[9px] font-bold px-2 py-0.5 rounded shadow -translate-x-1/2 self-center">
-                                                        50% Center Split
-                                                    </span>
-                                                </div>
-                                            )}
-
-                                        </div>
-                                    </div>
                                 ) : (
                                     <div className="text-xs text-slate-400">Click Set Margins to load preview.</div>
                                 )}
