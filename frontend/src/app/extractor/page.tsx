@@ -369,16 +369,16 @@ export default function ExtractorPage() {
                     )}
                 </div>
 
+            </div>
+
+            {/* Right Panel (Progress & Downloads) */}
+            <div className="col-span-1 lg:col-span-4 flex flex-col gap-4">
                 {/* Action Button */}
                 <div className={`shrink-0 transition-opacity ${validationResult ? 'opacity-100' : 'opacity-40 pointer-events-none'}`}>
                     <button onClick={startExtraction} disabled={isExtracting || !isSubjectValid} className="w-full py-3.5 bg-indigo-600 text-white font-bold text-base rounded-xl shadow hover:bg-indigo-700 hover:-translate-y-0.5 transform transition disabled:transform-none disabled:opacity-50">
                         {isExtracting ? <span><i className="fa-solid fa-circle-notch fa-spin mr-2"></i> Processing &amp; Parsing...</span> : <span><i className="fa-solid fa-wand-magic-sparkles mr-2"></i> Process Document</span>}
                     </button>
                 </div>
-            </div>
-
-            {/* Right Panel (Progress & Downloads) */}
-            <div className="col-span-1 lg:col-span-4 flex flex-col gap-4">
                 {/* Progress Bar */}
                 {jobProgress && jobProgress.total > 0 && (
                     <div className="bg-white border border-indigo-100 rounded-xl p-4 shadow-sm mt-4 animate-fade-in">
