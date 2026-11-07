@@ -1,3 +1,4 @@
+import html
 import re
 import asyncio
 import os
@@ -1118,10 +1119,156 @@ async def extract_pdf(
             cost=round(cost, 6)
         )
     
+    # Helper functions for table detection and formatting (Testpress Word/HTML standard)
+    def is_separator_row(line: str) -> bool:
+        s = line.strip()
+        cleaned = s.replace('|', '').replace('-', '').replace(':', '').replace(' ', '')
+        return len(cleaned) == 0 and '-' in s
+
+    def is_table_row(line: str) -> bool:
+        s = line.strip()
+        if is_separator_row(s):
+            return True
+        if '|' in s:
+            parts = [c.strip() for c in s.split('|') if c.strip()]
+            return len(parts) >= 2
+        return False
+
+    def parse_blocks(text: str):
+        lines = text.replace('\r\n', '\n').split('\n')
+        raw_blocks = []
+        curr_type = None
+        curr_lines = []
+        
+        for line in lines:
+            stripped = line.strip()
+            if not stripped:
+                if curr_lines:
+                    raw_blocks.append((curr_type, curr_lines))
+                    curr_lines = []
+                    curr_type = None
+                continue
+                
+            line_is_tbl = is_table_row(stripped)
+            if line_is_tbl:
+                if curr_type != 'table':
+                    if curr_lines:
+                        raw_blocks.append((curr_type, curr_lines))
+                        curr_lines = []
+                    curr_type = 'table'
+                curr_lines.append(stripped)
+            else:
+                if curr_type == 'table':
+                    raw_blocks.append((curr_type, curr_lines))
+                    curr_lines = []
+                    curr_type = 'text'
+                elif curr_type is None:
+                    curr_type = 'text'
+                curr_lines.append(stripped)
+                
+        if curr_lines:
+            raw_blocks.append((curr_type, curr_lines))
+            
+        final_blocks = []
+        for b_type, b_lines in raw_blocks:
+            if b_type == 'table':
+                non_sep = [l for l in b_lines if not is_separator_row(l)]
+                if len(non_sep) >= 2:
+                    final_blocks.append(('table', non_sep))
+                else:
+                    final_blocks.append(('text', b_lines))
+            else:
+                final_blocks.append(('text', b_lines))
+                
+        return final_blocks
+
+    def format_html_content(raw_text: str, q_num: str = None) -> str:
+        blocks = parse_blocks(raw_text)
+        html_out = ""
+        is_first_line = True
+        prefix = f"<b>Q.{q_num})</b> " if q_num is not None else ""
+        
+        for b_type, b_lines in blocks:
+            if b_type == 'table':
+                cleaned_rows = []
+                for r in b_lines:
+                    cells = [c.strip() for c in r.split('|')]
+                    if r.strip().startswith('|') and cells and cells[0] == '':
+                        cells = cells[1:]
+                    if r.strip().endswith('|') and cells and cells[-1] == '':
+                        cells = cells[:-1]
+                    cleaned_rows.append(cells)
+                    
+                if cleaned_rows:
+                    html_out += '<table border="1" cellpadding="6" cellspacing="0" style="border-collapse: collapse; margin: 10px 0; width: 100%; border: 1px solid #777;">\n'
+                    html_out += '  <thead>\n    <tr style="background-color: #f2f2f2; font-weight: bold;">\n'
+                    for c in cleaned_rows[0]:
+                        html_out += f'      <th style="border: 1px solid #777; padding: 6px 10px; text-align: center;">{html.escape(c)}</th>\n'
+                    html_out += '    </tr>\n  </thead>\n'
+                    
+                    if len(cleaned_rows) > 1:
+                        html_out += '  <tbody>\n'
+                        for row in cleaned_rows[1:]:
+                            html_out += '    <tr>\n'
+                            for c in row:
+                                html_out += f'      <td style="border: 1px solid #777; padding: 6px 10px; text-align: center;">{html.escape(c)}</td>\n'
+                            html_out += '    </tr>\n'
+                        html_out += '  </tbody>\n'
+                    html_out += '</table>\n'
+            else:
+                for line in b_lines:
+                    if is_first_line and prefix:
+                        html_out += f"<p>{prefix}{html.escape(line)}</p>\n"
+                        is_first_line = False
+                    else:
+                        html_out += f"<p>{html.escape(line)}</p>\n"
+                        
+        if is_first_line and prefix:
+            html_out = f"<p>{prefix}</p>\n" + html_out
+            
+        return html_out
+
+    def add_content_to_docx(doc, raw_text: str, q_num: str = None):
+        blocks = parse_blocks(raw_text)
+        is_first_line = True
+        prefix = f"Q.{q_num}) " if q_num is not None else ""
+        
+        for b_type, b_lines in blocks:
+            if b_type == 'table':
+                cleaned_rows = []
+                for r in b_lines:
+                    cells = [c.strip() for c in r.split('|')]
+                    if r.strip().startswith('|') and cells and cells[0] == '':
+                        cells = cells[1:]
+                    if r.strip().endswith('|') and cells and cells[-1] == '':
+                        cells = cells[:-1]
+                    cleaned_rows.append(cells)
+                    
+                if cleaned_rows and len(cleaned_rows[0]) > 0:
+                    num_rows = len(cleaned_rows)
+                    num_cols = max(len(r) for r in cleaned_rows)
+                    tbl = doc.add_table(rows=num_rows, cols=num_cols)
+                    tbl.style = 'Table Grid'
+                    for r_idx, row in enumerate(cleaned_rows):
+                        for c_idx, cell_text in enumerate(row):
+                            if c_idx < num_cols:
+                                tbl.cell(r_idx, c_idx).text = cell_text
+                    doc.add_paragraph("")
+            else:
+                for line in b_lines:
+                    if is_first_line and prefix:
+                        doc.add_paragraph(f"{prefix}{line}")
+                        is_first_line = False
+                    else:
+                        doc.add_paragraph(line)
+                        
+        if is_first_line and prefix:
+            doc.add_paragraph(prefix)
+
     # 1. Generate DOCX
     doc_q = Document()
     for q in questions:
-        doc_q.add_paragraph(f"Q.{q['num']}) {q['text']}")
+        add_content_to_docx(doc_q, q['text'], q_num=q['num'])
         for opt_letter, opt_text in q.get('options', {}).items():
             doc_q.add_paragraph(f"{opt_letter}) {opt_text}")
         doc_q.add_paragraph("")
@@ -1131,26 +1278,27 @@ async def extract_pdf(
     
     doc_e = Document()
     for s in solutions:
-        doc_e.add_paragraph(f"Q.{s['num']}) {s['explanation']}")
+        add_content_to_docx(doc_e, s['explanation'], q_num=s['num'])
         doc_e.add_paragraph("")
     e_io = io.BytesIO()
     doc_e.save(e_io)
     e_io.seek(0)
     
-    # 2. Generate HTML + ZIP
+    # 2. Generate HTML + ZIP (Formatted for Testpress Word Bulk Upload)
     word_html_template = """<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40"><head><meta http-equiv=Content-Type content="text/html; charset=utf-8"><meta name=ProgId content=Word.Document></head><body lang=EN-US><div class=WordSection1>\n{content}\n</div></body></html>"""
 
     q_content = ""
     for q in questions:
-        q_content += f"<p><b>Q.{q['num']})</b> {q['text']}</p>\n"
+        q_content += format_html_content(q['text'], q_num=q['num'])
         for opt_letter, opt_text in q.get('options', {}).items():
-            q_content += f"<p>{opt_letter}) {opt_text}</p>\n"
+            q_content += f"<p>{opt_letter}) {html.escape(opt_text)}</p>\n"
         q_content += "<br/>\n"
     q_html = word_html_template.format(content=q_content)
     
     e_content = ""
     for s in solutions:
-        e_content += f"<p><b>Q.{s['num']})</b> {s['explanation']}</p>\n<br/>\n"
+        e_content += format_html_content(s['explanation'], q_num=s['num'])
+        e_content += "<br/>\n"
     e_html = word_html_template.format(content=e_content)
     
     q_zip_io = io.BytesIO()
