@@ -209,10 +209,12 @@ def extract_with_gemini(page, api_key: str, mode: str, model_name: str, page_top
         prompt = lines_cache.get('gemini_q_prompt', """You are a strict data extractor for an LMS. Extract all questions from this page image.
 
 CRITICAL RULES:
-1. PLAIN TEXT MATH: Do NOT use LaTeX or TeX. Write all math in clean, plain-text format.
-   - Fractions: Always use parentheses for clarity (e.g., `(a + b) / c`).
-   - Multiplication: Use `*` or parentheses, NEVER use the algebra letter `x`.
-   - Powers & Roots: Use `^` for exponents (e.g., `y^2`) and `sqrt()` for roots.
+1. CLEAN MATHEMATICAL TYPOGRAPHY (NO LATEX, NO PROGRAMMING CODE):
+   - Multiplication: Use the actual multiplication symbol `×` (e.g., `(3/4 × 100)%`). NEVER use `*` or algebra letter `x`.
+   - Roots: Use `√` (e.g., `√x`, `√(b² - 4ac)`). NEVER use `sqrt()`.
+   - Powers / Exponents: Use unicode superscripts (e.g., `x²`, `y³`).
+   - Mixed Fractions: Write mixed fractions with a space (e.g., `93 1/3%` or `93 ⅓%`), not `93(1/3)%`.
+   - Fractions: Write clean `(a + b) / c` without excessive nested parentheses.
 
 2. OPTION EXTRACTION: Extract ALL answer options exactly as printed. Do NOT skip any options.
    - Universal Mapping: If the book uses numbers (1,2,3,4), lowercase (a,b,c,d), or roman numerals (i,ii,iii,iv), you MUST map them to standard capital letters: 1st option = "a", 2nd = "b", 3rd = "c", 4th = "d", 5th = "e".
@@ -231,22 +233,48 @@ Return a JSON array of objects. Each object must have:
         prompt = lines_cache.get('gemini_s_prompt', """You are a strict data transcriber for an LMS. Extract the solutions/explanations exactly as they appear in this page image without adding conversational filler or rewriting them.
 
 CRITICAL RULES:
-1. PLAIN TEXT MATH: Do NOT use LaTeX or TeX. Write all math in clean, plain-text format.
-   - Fractions: Always use parentheses for clarity (e.g., (a + b) / c).
-   - Multiplication: Use * or parentheses, NEVER use the algebra letter x.
-   - Powers & Roots: Use ^ for exponents (e.g., y^2) and sqrt() for roots.
+1. CLEAN MATHEMATICAL TYPOGRAPHY (NO LATEX, NO PROGRAMMING CODE):
+   Write mathematics using standard mathematical symbols, NOT programming code:
+   - Multiplication: Use the actual multiplication symbol `×` (e.g., `(3/4 × 100)%`). NEVER use `*` or the letter `x`.
+   - Roots: Use `√` (e.g., `√x`, `√(b² - 4ac)`). NEVER use `sqrt()`.
+   - Powers / Exponents: Use unicode superscripts where applicable (e.g., `x²`, `(260)²`, `y³`).
+   - Deduction Arrow: Use the clean mathematical implication arrow `⇒` (e.g., `10 - x = 4.20 ⇒ x = 5.8`). NEVER use `=>`.
+   - Mixed Fractions: Write mixed fractions clearly with a space (e.g., `93 1/3%` or `93 ⅓%`). Do NOT write `93(1/3)%`.
+   - Division / Fractions: Write simple fractions as `a / b` or `a/b`. Only use parentheses where mathematically necessary for grouping (e.g., `(100 + 84) / 200 × 100%`). Avoid unnecessary nested parentheses like `(((a / b) * c))`.
 
-2. PURE MATHEMATICAL TRANSCRIPTION (NO TUTORING): Do not explain the math in words. If the book shows an equation or calculation, output only the plain mathematical expression exactly as it is printed. Do NOT add conversational text describing the steps. Only include English words if they are actually printed on the page. NEVER correct the book's math; even if it contains a typo or calculation error, transcribe it exactly as printed.
+2. PURE MATHEMATICAL TRANSCRIPTION (NO TUTORING):
+   Do not explain the math in conversational English words (e.g., do NOT write "First, perform the multiplication...", "Next, divide...").
+   Output only the plain mathematical steps exactly as printed in the book. Only include English words if they are literally printed on the page. Never correct the book's math; transcribe it exactly.
 
-3. SPACING & LAYOUT: If a solution contains multiple lines of equations, place each equation on its own separate line using double line breaks (\n\n) so they do not collapse into a single paragraph.
+3. STEP-BY-STEP VERTICAL FLOW (ONE STEP PER LINE):
+   Each mathematical deduction or step MUST be placed on its own separate line using double line breaks (\n\n).
+   Do NOT chain multiple calculation steps together on a single line with `⇒`.
+   Example format:
+   Let 36% of 245 - 40% of 210 = 10 - x
 
-4. CAREFUL OPTION EXTRACTION & MAPPING: You must look carefully for the correct option.
-   - Universal Mapping: Regardless of how options are labeled in the book (e.g., numbers 1-4, lowercase a-d, roman numerals, or alternate letters), you MUST translate the correct answer to the standard capital letters (A, B, C, D, E) based on sequence. The 1st option is always A, the 2nd is B, the 3rd is C, and the 4th is D.
-   - No Hallucination: If the correct option is genuinely NOT printed anywhere in the text, you must leave the correct field blank "". DO NOT guess or hallucinate an answer.
+   (36/100 × 245) - (40/100 × 210) = 10 - x
 
-5. FINAL ANSWER: Always state the final conclusion clearly on the very last line of the explanation (e.g., "Final Answer: Option B").
+   ⇒ 88.20 - 84 = 10 - x
 
-6. CLEAN EXPLANATIONS: Do not include unnecessary headers from the book. If the text explains a diagram or puzzle, capture the logical explanation perfectly in text, but do not invent extra mathematical steps that aren't printed on the page.
+   ⇒ 10 - x = 4.20
+
+   ⇒ x = 5.8
+
+4. TABLES IN SOLUTIONS:
+   If a solution contains a table, transcribe it as a clean markdown table using pipes `|`:
+   Subjects | Total Marks | Marks Obtained
+   Mathematics | 100 | 100
+   Science | 100 | 84
+
+5. CAREFUL OPTION EXTRACTION & MAPPING:
+   - Universal Mapping: Regardless of how options are labeled in the book (e.g., numbers 1-4, lowercase a-d, roman numerals, or alternate letters), you MUST translate the correct answer to standard capital letters (A, B, C, D, E) based on sequence. The 1st option is A, 2nd is B, 3rd is C, 4th is D, 5th is E.
+   - No Hallucination: If the correct option is genuinely NOT printed anywhere in the text, leave the `correct` field blank `""`. DO NOT guess or hallucinate an answer.
+
+6. FINAL ANSWER:
+   Always state the final conclusion clearly on the very last line of the explanation (e.g., "Final Answer: Option B").
+
+7. CLEAN EXPLANATIONS:
+   Do not include unnecessary headers from the book. If the text explains a diagram or puzzle, capture the logical explanation perfectly in text, but do not invent extra mathematical steps that aren't printed on the page.
 """)
 
     import fitz
@@ -352,10 +380,12 @@ def extract_with_groq(page, api_key: str, mode: str, model_name: str, page_top: 
         prompt = """You are a strict data extractor for an LMS. Extract all questions from this page image.
 
 CRITICAL RULES:
-1. PLAIN TEXT MATH: Do NOT use LaTeX or TeX. Write all math in clean, plain-text format. 
-   - Use parentheses for fractions (e.g., `(x + 2) / 4`).
-   - Use `^` for exponents (e.g., `x^2`) and `sqrt()` for roots.
-   - Use `*` for multiplication, NEVER use the letter `x`.
+1. CLEAN MATHEMATICAL TYPOGRAPHY (NO LATEX, NO PROGRAMMING CODE):
+   - Multiplication: Use the actual multiplication symbol `×` (e.g., `(3/4 × 100)%`). NEVER use `*` or algebra letter `x`.
+   - Roots: Use `√` (e.g., `√x`, `√(b² - 4ac)`). NEVER use `sqrt()`.
+   - Powers / Exponents: Use unicode superscripts (e.g., `x²`, `y³`).
+   - Mixed Fractions: Write mixed fractions with a space (e.g., `93 1/3%` or `93 ⅓%`), not `93(1/3)%`.
+   - Fractions: Write clean `(a + b) / c` without excessive nested parentheses.
 
 2. SPACING & LAYOUT: If a question contains multiple equations, a list of statements, or multiple conclusions (like in Syllogisms), you MUST place each one on its own separate line. Use double line breaks (\\n\\n) between them so they do not collapse into a single paragraph.
 
@@ -382,22 +412,48 @@ Each object must have:
         prompt = """You are a strict data transcriber for an LMS. Extract the solutions/explanations exactly as they appear in this page image without adding conversational filler or rewriting them.
 
 CRITICAL RULES:
-1. PLAIN TEXT MATH: Do NOT use LaTeX or TeX. Write all math in clean, plain-text format.
-   - Fractions: Always use parentheses for clarity (e.g., (a + b) / c).
-   - Multiplication: Use * or parentheses, NEVER use the algebra letter x.
-   - Powers & Roots: Use ^ for exponents (e.g., y^2) and sqrt() for roots.
+1. CLEAN MATHEMATICAL TYPOGRAPHY (NO LATEX, NO PROGRAMMING CODE):
+   Write mathematics using standard mathematical symbols, NOT programming code:
+   - Multiplication: Use the actual multiplication symbol `×` (e.g., `(3/4 × 100)%`). NEVER use `*` or the letter `x`.
+   - Roots: Use `√` (e.g., `√x`, `√(b² - 4ac)`). NEVER use `sqrt()`.
+   - Powers / Exponents: Use unicode superscripts where applicable (e.g., `x²`, `(260)²`, `y³`).
+   - Deduction Arrow: Use the clean mathematical implication arrow `⇒` (e.g., `10 - x = 4.20 ⇒ x = 5.8`). NEVER use `=>`.
+   - Mixed Fractions: Write mixed fractions clearly with a space (e.g., `93 1/3%` or `93 ⅓%`). Do NOT write `93(1/3)%`.
+   - Division / Fractions: Write simple fractions as `a / b` or `a/b`. Only use parentheses where mathematically necessary for grouping (e.g., `(100 + 84) / 200 × 100%`). Avoid unnecessary nested parentheses like `(((a / b) * c))`.
 
-2. PURE MATHEMATICAL TRANSCRIPTION (NO TUTORING): Do not explain the math in words. If the book shows an equation or calculation, output only the plain mathematical expression exactly as it is printed. Do NOT add conversational text describing the steps. Only include English words if they are actually printed on the page. NEVER correct the book's math; even if it contains a typo or calculation error, transcribe it exactly as printed.
+2. PURE MATHEMATICAL TRANSCRIPTION (NO TUTORING):
+   Do not explain the math in conversational English words (e.g., do NOT write "First, perform the multiplication...", "Next, divide...").
+   Output only the plain mathematical steps exactly as printed in the book. Only include English words if they are literally printed on the page. Never correct the book's math; transcribe it exactly.
 
-3. SPACING & LAYOUT: If a solution contains multiple lines of equations, place each equation on its own separate line using double line breaks (\n\n) so they do not collapse into a single paragraph.
+3. STEP-BY-STEP VERTICAL FLOW (ONE STEP PER LINE):
+   Each mathematical deduction or step MUST be placed on its own separate line using double line breaks (\n\n).
+   Do NOT chain multiple calculation steps together on a single line with `⇒`.
+   Example format:
+   Let 36% of 245 - 40% of 210 = 10 - x
 
-4. CAREFUL OPTION EXTRACTION & MAPPING: You must look carefully for the correct option.
-   - Universal Mapping: Regardless of how options are labeled in the book (e.g., numbers 1-4, lowercase a-d, roman numerals, or alternate letters), you MUST translate the correct answer to the standard capital letters (A, B, C, D, E) based on sequence. The 1st option is always A, the 2nd is B, the 3rd is C, and the 4th is D.
-   - No Hallucination: If the correct option is genuinely NOT printed anywhere in the text, you must leave the correct field blank "". DO NOT guess or hallucinate an answer.
+   (36/100 × 245) - (40/100 × 210) = 10 - x
 
-5. FINAL ANSWER: Always state the final conclusion clearly on the very last line of the explanation (e.g., "Final Answer: Option B").
+   ⇒ 88.20 - 84 = 10 - x
 
-6. CLEAN EXPLANATIONS: Do not include unnecessary headers from the book. If the text explains a diagram or puzzle, capture the logical explanation perfectly in text, but do not invent extra mathematical steps that aren't printed on the page.
+   ⇒ 10 - x = 4.20
+
+   ⇒ x = 5.8
+
+4. TABLES IN SOLUTIONS:
+   If a solution contains a table, transcribe it as a clean markdown table using pipes `|`:
+   Subjects | Total Marks | Marks Obtained
+   Mathematics | 100 | 100
+   Science | 100 | 84
+
+5. CAREFUL OPTION EXTRACTION & MAPPING:
+   - Universal Mapping: Regardless of how options are labeled in the book (e.g., numbers 1-4, lowercase a-d, roman numerals, or alternate letters), you MUST translate the correct answer to standard capital letters (A, B, C, D, E) based on sequence. The 1st option is A, 2nd is B, 3rd is C, 4th is D, 5th is E.
+   - No Hallucination: If the correct option is genuinely NOT printed anywhere in the text, leave the `correct` field blank `""`. DO NOT guess or hallucinate an answer.
+
+6. FINAL ANSWER:
+   Always state the final conclusion clearly on the very last line of the explanation (e.g., "Final Answer: Option B").
+
+7. CLEAN EXPLANATIONS:
+   Do not include unnecessary headers from the book. If the text explains a diagram or puzzle, capture the logical explanation perfectly in text, but do not invent extra mathematical steps that aren't printed on the page.
 
 You MUST return a JSON object with a single key "data", which contains an array of objects.
 Each object must have:
@@ -1183,6 +1239,9 @@ async def extract_pdf(
         return final_blocks
 
     def format_html_content(raw_text: str, q_num: str = None) -> str:
+        # Normalize code symbols to mathematical symbols
+        raw_text = raw_text.replace("=>", "⇒").replace("->", "→")
+        raw_text = re.sub(r'sqrt\((.*?)\)', r'√(\1)', raw_text)
         blocks = parse_blocks(raw_text)
         html_out = ""
         is_first_line = True
@@ -1229,6 +1288,9 @@ async def extract_pdf(
         return html_out
 
     def add_content_to_docx(doc, raw_text: str, q_num: str = None):
+        # Normalize code symbols to mathematical symbols
+        raw_text = raw_text.replace("=>", "⇒").replace("->", "→")
+        raw_text = re.sub(r'sqrt\((.*?)\)', r'√(\1)', raw_text)
         blocks = parse_blocks(raw_text)
         is_first_line = True
         prefix = f"Q.{q_num}) " if q_num is not None else ""
