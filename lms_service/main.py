@@ -298,10 +298,36 @@ CRITICAL RULES:
     
     return all_results, total_tokens
 
+def make_http_request(url: str, method: str = "GET", headers: dict = None, json_data: dict = None, timeout: float = 120.0):
+    headers = headers or {}
+    try:
+        import httpx
+        with httpx.Client(timeout=timeout) as client:
+            if method.upper() == "POST":
+                resp = client.post(url, headers=headers, json=json_data)
+            else:
+                resp = client.get(url, headers=headers)
+        return resp.status_code, resp.json(), resp.text
+    except ImportError:
+        import urllib.request
+        import urllib.error
+        data = json.dumps(json_data).encode("utf-8") if json_data is not None else None
+        req = urllib.request.Request(url, data=data, headers=headers, method=method.upper())
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                body = r.read().decode("utf-8")
+                return r.status, json.loads(body) if body else {}, body
+        except urllib.error.HTTPError as e:
+            err_body = e.read().decode("utf-8")
+            try:
+                parsed = json.loads(err_body)
+            except Exception:
+                parsed = {}
+            return e.code, parsed, err_body
+
 def extract_with_groq(page, api_key: str, mode: str, model_name: str, page_top: float = 0.0, page_bottom: float = 1.0, columns: int = 1):
     import base64
     import json
-    import httpx
     import time
     import fitz
     
@@ -421,18 +447,29 @@ Each object must have:
                     print(f"Groq API retry {attempt}/{max_retries - 1}. Waiting {backoff_time}s...")
                     time.sleep(backoff_time)
                     
-                with httpx.Client(timeout=120.0) as client:
-                    resp = client.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=payload)
-                    
-                resp.raise_for_status()
-                data_json = resp.json()
+                status_code, data_json, raw_text = make_http_request(
+                    "https://api.groq.com/openai/v1/chat/completions",
+                    method="POST",
+                    headers=headers,
+                    json_data=payload,
+                    timeout=120.0
+                )
+                
+                if status_code != 200:
+                    err_msg = data_json.get("error", {}).get("message") or raw_text or f"HTTP {status_code}"
+                    err_str = err_msg.lower()
+                    if "429" in err_str or "quota" in err_str or "too many" in err_str:
+                        if attempt < max_retries - 1:
+                            print(f"Groq Rate limit hit (Attempt {attempt+1}). Retrying...")
+                            continue
+                    raise RuntimeError(f"Groq API Error: {err_msg}")
                 
                 usage = data_json.get("usage", {})
                 total_tokens["input"] += usage.get("prompt_tokens", 0)
                 total_tokens["output"] += usage.get("completion_tokens", 0)
                 total_tokens["total"] += usage.get("total_tokens", 0)
                 
-                content_str = data_json["choices"][0]["message"].get("content") or ""
+                content_str = data_json.get("choices", [{}])[0].get("message", {}).get("content") or ""
                 
                 match = re.search(r'```(?:json)?(.*?)```', content_str, re.DOTALL)
                 if match:
@@ -444,20 +481,10 @@ Each object must have:
                 
             except Exception as e:
                 err_str = str(e).lower()
-                if "429" in err_str or "quota" in err_str or "too many" in err_str:
-                    if attempt < max_retries - 1:
-                        print(f"Groq Rate limit hit (Attempt {attempt+1}). Retrying...")
-                        continue
+                if ("429" in err_str or "quota" in err_str or "too many" in err_str) and attempt < max_retries - 1:
+                    continue
                 print(f"Groq API Error: {e}")
-                err_detail = str(e)
-                if hasattr(e, 'response') and e.response is not None:
-                    try:
-                        err_json = e.response.json()
-                        err_detail = err_json.get("error", {}).get("message", e.response.text)
-                    except Exception:
-                        err_detail = e.response.text
-                print("Response:", err_detail)
-                raise RuntimeError(f"Groq API Error: {err_detail}")
+                raise
             
     return all_results, total_tokens
 
@@ -682,10 +709,15 @@ async def list_available_models(provider: str = "gemini", admin: dict = Depends(
         if not api_key:
             raise HTTPException(status_code=400, detail="Groq API Key not configured yet")
         try:
-            with httpx.Client(timeout=30.0) as client:
-                resp = client.get("https://api.groq.com/openai/v1/models", headers={"Authorization": f"Bearer {api_key}"})
-            resp.raise_for_status()
-            data = resp.json()
+            status_code, data, raw_text = make_http_request(
+                "https://api.groq.com/openai/v1/models",
+                method="GET",
+                headers={"Authorization": f"Bearer {api_key}"},
+                timeout=30.0
+            )
+            if status_code != 200:
+                err_msg = data.get("error", {}).get("message") or raw_text or f"HTTP {status_code}"
+                raise RuntimeError(err_msg)
             models = []
             for m in data.get("data", []):
                 m_id = m.get("id", "")
