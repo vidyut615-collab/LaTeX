@@ -24,8 +24,10 @@ export default function AdminPage() {
     
     const [models, setModels] = useState([]);
     const [geminiModel, setGeminiModel] = useState('gemini-2.5-flash-lite');
-    const [groqModel, setGroqModel] = useState('qwen/qwen3.8-27b');
+    const [groqModel, setGroqModel] = useState('meta-models/muse-spark-open');
     const [loadingModels, setLoadingModels] = useState(false);
+    const [groqModels, setGroqModels] = useState([]);
+    const [loadingGroqModels, setLoadingGroqModels] = useState(false);
     const [sandboxFile, setSandboxFile] = useState(null);
     const [sandboxMode, setSandboxMode] = useState('questions');
     const [sandboxResult, setSandboxResult] = useState(null);
@@ -126,7 +128,7 @@ export default function AdminPage() {
     const fetchModels = async () => {
         setLoadingModels(true);
         try {
-            const res = await fetch(`${API_URL}/api/admin/models`, { headers: authHeaders() });
+            const res = await fetch(`${API_URL}/api/admin/models?provider=gemini`, { headers: authHeaders() });
             if (res.ok) {
                 setModels(await res.json());
             } else {
@@ -137,6 +139,22 @@ export default function AdminPage() {
             console.error(err);
         }
         setLoadingModels(false);
+    };
+
+    const fetchGroqModels = async () => {
+        setLoadingGroqModels(true);
+        try {
+            const res = await fetch(`${API_URL}/api/admin/models?provider=groq`, { headers: authHeaders() });
+            if (res.ok) {
+                setGroqModels(await res.json());
+            } else {
+                const err = await res.json();
+                alert("Error fetching Groq models: " + err.detail);
+            }
+        } catch (err) {
+            console.error(err);
+        }
+        setLoadingGroqModels(false);
     };
 
     const exportLogsExcel = () => {
@@ -460,7 +478,7 @@ export default function AdminPage() {
                                             </span>
                                         )}
                                     </div>
-                                    <p className="text-xs text-slate-500 mt-0.5">Model: <span className="font-mono font-medium text-slate-700">qwen/qwen3.8-27b</span></p>
+                                    <p className="text-xs text-slate-500 mt-0.5">Model: <span className="font-mono font-medium text-slate-700">{groqModel || "meta-models/muse-spark-open"}</span></p>
                                 </div>
                             </div>
 
@@ -591,14 +609,28 @@ export default function AdminPage() {
                                             </div>
 
                                             <div>
-                                                <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Vision Model</label>
-                                                <input 
-                                                    type="text" 
-                                                    value="qwen/qwen3.8-27b" 
-                                                    readOnly 
-                                                    className="w-full border border-slate-200 bg-slate-100 text-slate-700 rounded-lg p-2.5 text-sm font-mono cursor-not-allowed outline-none"
-                                                />
-                                                <p className="text-[10px] text-slate-400 mt-1">Configured strictly for Groq Vision: <code>qwen/qwen3.8-27b</code></p>
+                                                <div className="flex justify-between items-center mb-1">
+                                                    <label className="text-[10px] font-bold text-slate-500 uppercase">Groq Model</label>
+                                                    <button type="button" onClick={fetchGroqModels} className="text-[10px] font-bold text-orange-600 hover:underline">
+                                                        {loadingGroqModels ? 'Fetching...' : 'Fetch Live Models'}
+                                                    </button>
+                                                </div>
+                                                <select 
+                                                    value={groqModel} 
+                                                    onChange={e=>setGroqModel(e.target.value)} 
+                                                    className="w-full border border-slate-300 bg-white rounded-lg p-2.5 text-sm outline-none focus:border-orange-500 font-mono text-xs"
+                                                >
+                                                    <option value="meta-models/muse-spark-open">meta-models/muse-spark-open (Meta Muse Spark MoE 816B Reasoning &amp; Vision)</option>
+                                                    <option value="qwen/qwen3.8-27b">qwen/qwen3.8-27b (Qwen 3.8 27B Vision)</option>
+                                                    <option value="llama-3.2-11b-vision-preview">llama-3.2-11b-vision-preview (Llama 3.2 11B Vision)</option>
+                                                    <option value="llama-3.2-90b-vision-preview">llama-3.2-90b-vision-preview (Llama 3.2 90B Vision)</option>
+                                                    {groqModels.filter(m => !['meta-models/muse-spark-open', 'qwen/qwen3.8-27b', 'llama-3.2-11b-vision-preview', 'llama-3.2-90b-vision-preview'].includes(m.name)).map(m => (
+                                                        <option key={m.name} value={m.name}>{m.name}</option>
+                                                    ))}
+                                                </select>
+                                                <p className="text-[10px] text-slate-400 mt-1">
+                                                    Supports Meta Muse Spark Open (MoE 816B multimodal reasoning), Qwen, and Llama Vision on Groq.
+                                                </p>
                                             </div>
                                         </React.Fragment>
                                     )}

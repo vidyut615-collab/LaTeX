@@ -404,9 +404,14 @@ Each object must have:
                     ]
                 }
             ],
-            "response_format": {"type": "json_object"},
-            "temperature": 0.01
+            "response_format": {"type": "json_object"}
         }
+        
+        # muse-spark-open requires default temperature (1.0) and supports reasoning_effort
+        if "muse-spark" in model_name.lower():
+            payload["reasoning_effort"] = "medium"
+        else:
+            payload["temperature"] = 0.01
         
         max_retries = 6
         for attempt in range(max_retries):
@@ -427,7 +432,7 @@ Each object must have:
                 total_tokens["output"] += usage.get("completion_tokens", 0)
                 total_tokens["total"] += usage.get("total_tokens", 0)
                 
-                content_str = data_json["choices"][0]["message"]["content"]
+                content_str = data_json["choices"][0]["message"].get("content") or ""
                 
                 match = re.search(r'```(?:json)?(.*?)```', content_str, re.DOTALL)
                 if match:
@@ -597,7 +602,7 @@ async def get_settings(admin: dict = Depends(require_super_admin)):
     groq_key = db.get_setting("groq_api_key") or ""
     provider = db.get_setting("active_ai_provider") or "gemini"
     g_model = db.get_setting("gemini_model") or "gemini-2.5-flash-lite"
-    groq_model = "qwen/qwen3.8-27b"
+    groq_model = db.get_setting("groq_model") or "meta-models/muse-spark-open"
     
     g_masked = f"{g_key[:6]}...{g_key[-4:]}" if len(g_key) > 10 else ("Configured" if g_key else "")
     groq_masked = f"{groq_key[:6]}...{groq_key[-4:]}" if len(groq_key) > 10 else ("Configured" if groq_key else "")
@@ -624,7 +629,8 @@ async def save_settings(req: SettingRequest, admin: dict = Depends(require_super
     db.set_setting("active_ai_provider", req.active_ai_provider)
     if req.gemini_model:
         db.set_setting("gemini_model", req.gemini_model)
-    db.set_setting("groq_model", "qwen/qwen3.8-27b")
+    if req.groq_model:
+        db.set_setting("groq_model", req.groq_model)
         
     return {"message": "Settings saved successfully."}
 
@@ -637,7 +643,7 @@ async def test_model(
 ):
     provider = db.get_setting("active_ai_provider") or "gemini"
     if provider == "groq":
-        model_name = "qwen/qwen3.8-27b"
+        model_name = db.get_setting("groq_model") or "meta-models/muse-spark-open"
     else:
         model_name = db.get_setting("gemini_model") or "gemini-2.5-flash-lite"
     img_bytes = await file.read()
@@ -664,24 +670,45 @@ async def test_model(
         raise HTTPException(status_code=400, detail=str(e))
 
 @app.get("/api/admin/models")
-async def list_available_models(admin: dict = Depends(require_super_admin)):
-    api_key = db.get_setting("gemini_api_key")
-    if not api_key:
-        raise HTTPException(status_code=400, detail="API Key not configured yet")
-    try:
-        client = genai.Client(api_key=api_key)
-        models = []
-        for m in client.models.list():
-            actions = getattr(m, 'supported_actions', [])
-            if actions and 'generateContent' in actions and m.name.startswith('models/gemini'):
+async def list_available_models(provider: str = "gemini", admin: dict = Depends(require_super_admin)):
+    if provider == "groq":
+        api_key = db.get_setting("groq_api_key")
+        if not api_key:
+            raise HTTPException(status_code=400, detail="Groq API Key not configured yet")
+        try:
+            with httpx.Client(timeout=30.0) as client:
+                resp = client.get("https://api.groq.com/openai/v1/models", headers={"Authorization": f"Bearer {api_key}"})
+            resp.raise_for_status()
+            data = resp.json()
+            models = []
+            for m in data.get("data", []):
+                m_id = m.get("id", "")
                 models.append({
-                    "name": m.name.replace('models/', ''),
-                    "display_name": getattr(m, 'display_name', m.name),
-                    "description": getattr(m, 'description', '')
+                    "name": m_id,
+                    "display_name": m_id,
+                    "description": f"Owner: {m.get('owned_by', 'groq')}"
                 })
-        return models
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+            return models
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Failed to fetch Groq models: {str(e)}")
+    else:
+        api_key = db.get_setting("gemini_api_key")
+        if not api_key:
+            raise HTTPException(status_code=400, detail="Gemini API Key not configured yet")
+        try:
+            client = genai.Client(api_key=api_key)
+            models = []
+            for m in client.models.list():
+                actions = getattr(m, 'supported_actions', [])
+                if actions and 'generateContent' in actions and m.name.startswith('models/gemini'):
+                    models.append({
+                        "name": m.name.replace('models/', ''),
+                        "display_name": getattr(m, 'display_name', m.name),
+                        "description": getattr(m, 'description', '')
+                    })
+            return models
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=str(e))
 
 @app.get("/api/admin/logs")
 async def get_logs(admin: dict = Depends(require_super_admin)):
@@ -860,7 +887,7 @@ async def extract_pdf(
         provider = db.get_setting("active_ai_provider") or "gemini"
         
         if provider == "groq":
-            model_name = "qwen/qwen3.8-27b"
+            model_name = db.get_setting("groq_model") or "meta-models/muse-spark-open"
             api_key = db.get_setting("groq_api_key")
             if not api_key:
                 raise HTTPException(
