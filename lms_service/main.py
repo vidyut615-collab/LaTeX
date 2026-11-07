@@ -449,9 +449,15 @@ Each object must have:
                         print(f"Groq Rate limit hit (Attempt {attempt+1}). Retrying...")
                         continue
                 print(f"Groq API Error: {e}")
-                if hasattr(e, 'response'):
-                    print("Response:", e.response.text)
-                break  # Non-retryable error, skip this clip
+                err_detail = str(e)
+                if hasattr(e, 'response') and e.response is not None:
+                    try:
+                        err_json = e.response.json()
+                        err_detail = err_json.get("error", {}).get("message", e.response.text)
+                    except Exception:
+                        err_detail = e.response.text
+                print("Response:", err_detail)
+                raise RuntimeError(f"Groq API Error: {err_detail}")
             
     return all_results, total_tokens
 
@@ -941,7 +947,12 @@ async def extract_pdf(
                 q_text_buffer = ""
             
             ai_extract_fn = extract_with_groq if provider == "groq" else extract_with_gemini
-            ai_qs, tokens = ai_extract_fn(page, api_key, "questions", model_name, page_top, page_bottom, columns=int(columns or 1))
+            try:
+                ai_qs, tokens = ai_extract_fn(page, api_key, "questions", model_name, page_top, page_bottom, columns=int(columns or 1))
+            except Exception as e:
+                if job_id:
+                    PROGRESS_TRACKER[job_id] = {"status": "error", "error": str(e)}
+                raise HTTPException(status_code=400, detail=str(e))
             questions.extend(ai_qs)
             total_input_tokens += tokens["input"]
             total_output_tokens += tokens["output"]
@@ -978,7 +989,12 @@ async def extract_pdf(
                 s_text_buffer = ""
                 
             ai_extract_fn = extract_with_groq if provider == "groq" else extract_with_gemini
-            ai_sols, tokens = ai_extract_fn(page, api_key, "solutions", model_name, page_top, page_bottom, columns=int(columns or 1))
+            try:
+                ai_sols, tokens = ai_extract_fn(page, api_key, "solutions", model_name, page_top, page_bottom, columns=int(columns or 1))
+            except Exception as e:
+                if job_id:
+                    PROGRESS_TRACKER[job_id] = {"status": "error", "error": str(e)}
+                raise HTTPException(status_code=400, detail=str(e))
             solutions.extend(ai_sols)
             total_input_tokens += tokens["input"]
             total_output_tokens += tokens["output"]
