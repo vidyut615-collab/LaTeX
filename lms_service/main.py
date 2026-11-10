@@ -598,8 +598,8 @@ def parse_questions_python(text):
                 opts = {}
                 first_start = opt_matches[0].start()
                 for o_idx in range(len(opt_matches)):
-                    raw_key = opt_matches[o_idx].group(1).upper()
-                    num_map = {'1': 'A', '2': 'B', '3': 'C', '4': 'D', '5': 'E'}
+                    raw_key = opt_matches[o_idx].group(1).lower()
+                    num_map = {'1': 'a', '2': 'b', '3': 'c', '4': 'd', '5': 'e'}
                     opt_key = num_map.get(raw_key, raw_key)
                     
                     o_start = opt_matches[o_idx].end()
@@ -643,7 +643,7 @@ def parse_solutions_python(text):
             if match:
                 solutions.append({
                     'num': match.group(1),
-                    'correct': match.group(2).upper(),
+                    'correct': match.group(2).lower(),
                     'explanation': match.group(3).strip()
                 })
         return solutions
@@ -651,7 +651,7 @@ def parse_solutions_python(text):
     for i in range(len(matches)):
         m = matches[i]
         q_num = m.group(1) or m.group(2)
-        correct = m.group(3).upper()
+        correct = m.group(3).lower()
         start_pos = m.end()
         end_pos = matches[i+1].start() if i + 1 < len(matches) else len(text)
         explanation = text[start_pos:end_pos].strip()
@@ -957,13 +957,21 @@ async def validate_pdf(
     pdf_bytes = await file.read()
     doc = fitz.open(stream=pdf_bytes, filetype="pdf")
     
+    sol_header_re = re.compile(r'(?:ANSWERS?\s*(?:&|AND)?\s*EXPLANATIONS?|HINTS?\s*(?:&|AND)?\s*SOLUTIONS?|ANSWER\s*KEY)\b', re.IGNORECASE)
+
     q_text = ""
     for i in range(q_start - 1, min(q_end, len(doc))):
-        q_text += get_page_text_with_layout(doc[i], top_margin_pct, bottom_margin_pct, columns) + "\n"
+        raw_page_text = get_page_text_with_layout(doc[i], top_margin_pct, bottom_margin_pct, columns)
+        if i == q_end - 1 and q_end >= s_start and sol_header_re.search(raw_page_text):
+            raw_page_text = sol_header_re.split(raw_page_text)[0]
+        q_text += raw_page_text + "\n"
         
     s_text = ""
     for i in range(s_start - 1, min(s_end, len(doc))):
-        s_text += get_page_text_with_layout(doc[i], top_margin_pct, bottom_margin_pct, columns) + "\n"
+        raw_page_text = get_page_text_with_layout(doc[i], top_margin_pct, bottom_margin_pct, columns)
+        if i == s_start - 1 and s_start <= q_end and sol_header_re.search(raw_page_text):
+            raw_page_text = sol_header_re.split(raw_page_text, 1)[-1]
+        s_text += raw_page_text + "\n"
         
     questions = parse_questions_python(q_text)
     solutions = parse_solutions_python(s_text)
@@ -1467,7 +1475,7 @@ async def extract_pdf(
     for q in questions:
         add_content_to_docx(doc_q, q['text'], q_num=q['num'])
         for opt_letter, opt_text in q.get('options', {}).items():
-            doc_q.add_paragraph(f"{opt_letter}) {opt_text}")
+            doc_q.add_paragraph(f"{opt_letter.lower()}) {opt_text}")
         doc_q.add_paragraph("")
     q_io = io.BytesIO()
     doc_q.save(q_io)
@@ -1488,7 +1496,7 @@ async def extract_pdf(
     for q in questions:
         q_content += format_html_content(q['text'], q_num=q['num'])
         for opt_letter, opt_text in q.get('options', {}).items():
-            q_content += f"<p>{opt_letter}) {html.escape(opt_text)}</p>\n"
+            q_content += f"<p>{opt_letter.lower()}) {html.escape(opt_text)}</p>\n"
         q_content += "<br/>\n"
     q_html = word_html_template.format(content=q_content)
     
@@ -1514,11 +1522,11 @@ async def extract_pdf(
         q_norm = normalize_num(q.get('num', ''))
         correct_ans = sol_map.get(q_norm, {}).get('correct', '')
         
-        # Clean up correct answer string (e.g. "Option B" -> "B")
+        # Clean up correct answer string (e.g. "Option B" -> "b")
         if correct_ans:
             match = re.search(r'[A-Ea-e]', correct_ans)
             if match:
-                correct_ans = match.group(0).upper()
+                correct_ans = match.group(0).lower()
                 
         data.append({
             'Question Number': q['num'],
