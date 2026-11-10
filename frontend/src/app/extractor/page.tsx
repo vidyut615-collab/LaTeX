@@ -291,17 +291,7 @@ export default function ExtractorPage() {
                     </div>
                 </div>
 
-                {/* Quick Status Badges */}
-                <div className="flex items-center gap-2 text-xs">
-                    <span className="px-3 py-1.5 rounded-lg font-semibold bg-slate-100 text-slate-700 border border-slate-200 flex items-center gap-1.5">
-                        <Columns className="w-3.5 h-3.5 text-slate-500" />
-                        <span>{columns === 2 ? '2-Column Mode' : '1-Column Mode'}</span>
-                    </span>
-                    <span className="px-3 py-1.5 rounded-lg font-semibold bg-slate-100 text-slate-700 border border-slate-200 flex items-center gap-1.5">
-                        <Crop className="w-3.5 h-3.5 text-slate-500" />
-                        <span>Margins: {topMargin > 0 || bottomMargin > 0 ? `T:${topMargin}% B:${bottomMargin}%` : 'Full'}</span>
-                    </span>
-                </div>
+
             </div>
 
             {/* Main Workbench Grid (Left Configuration 7 cols, Right Diagnostic & Download 5 cols) */}
