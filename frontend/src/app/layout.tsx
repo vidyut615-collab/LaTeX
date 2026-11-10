@@ -16,8 +16,8 @@ const geistMono = Geist_Mono({
 import Header from "@/components/Header";
 
 export const metadata: Metadata = {
-  title: "LMS Extractor",
-  description: "LMS Document Parsing Tool",
+  title: "Testpress LMS Extractor | EdTech Document Intelligence",
+  description: "High-precision PDF extraction & formatting engine for Testpress LMS Word Bulk Upload",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -29,7 +29,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head>
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
       </head>
-      <body className="min-h-full flex flex-col bg-slate-50 text-slate-800">
+      <body className="min-h-full flex flex-col bg-slate-50 text-slate-900 font-sans antialiased">
         <Header />
         <main className="flex-1 flex flex-col">{children}</main>
       </body>
