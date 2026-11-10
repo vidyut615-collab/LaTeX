@@ -14,8 +14,7 @@ import {
     CheckCircle2, 
     Sparkles, 
     ShieldCheck, 
-    FileCheck2,
-    Layers
+    Zap
 } from "lucide-react";
 
 export default function LoginPage() {
@@ -69,11 +68,6 @@ export default function LoginPage() {
         }
     };
 
-    const handleQuickFill = (u: string, p: string) => {
-        setUsername(u);
-        setPassword(p);
-    };
-
     return (
         <div className="min-h-screen bg-slate-900 flex flex-col justify-center items-center p-4 sm:p-6 relative overflow-hidden">
             {/* Background decorative glows & grid */}
@@ -86,13 +80,14 @@ export default function LoginPage() {
                 {/* Left Brand / Feature Showcase Panel */}
                 <div className="md:col-span-5 bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 p-8 sm:p-10 flex flex-col justify-between border-b md:border-b-0 md:border-r border-slate-800 text-white relative">
                     <div>
-                        <div className="w-12 h-12 rounded-2xl bg-indigo-600 flex items-center justify-center text-white mb-6 shadow-lg shadow-indigo-500/30 ring-1 ring-white/20">
+                        <div className="w-12 h-12 rounded-2xl bg-indigo-600 flex items-center justify-center text-white mb-5 shadow-lg shadow-indigo-500/30 ring-1 ring-white/20">
                             <FileText className="w-6 h-6" />
                         </div>
                         
-                        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-indigo-500/20 text-indigo-300 border border-indigo-400/30 mb-3">
-                            <Sparkles className="w-3 h-3 text-indigo-400" />
-                            <span>Testpress LMS Format v2.4</span>
+                        {/* Powered by Truskill Badge */}
+                        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold bg-indigo-500/20 text-indigo-200 border border-indigo-400/30 mb-4 shadow-sm">
+                            <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+                            <span>Powered by Truskill</span>
                         </div>
 
                         <h2 className="text-2xl font-black tracking-tight text-white leading-tight">
@@ -106,20 +101,20 @@ export default function LoginPage() {
 
                     <div className="mt-8 space-y-3.5 border-t border-slate-800/80 pt-6">
                         <div className="flex items-start gap-3">
-                            <div className="w-5 h-5 rounded-md bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 mt-0.5">
-                                <CheckCircle2 className="w-3.5 h-3.5" />
-                            </div>
-                            <p className="text-xs text-slate-300">
-                                <strong className="text-white font-semibold">Testpress Specification:</strong> Lowercase <code className="bg-slate-800 px-1 py-0.5 rounded text-emerald-300">a)</code>, <code className="bg-slate-800 px-1 py-0.5 rounded text-emerald-300">b)</code>, <code className="bg-slate-800 px-1 py-0.5 rounded text-emerald-300">c)</code>, <code className="bg-slate-800 px-1 py-0.5 rounded text-emerald-300">d)</code> options.
-                            </p>
-                        </div>
-
-                        <div className="flex items-start gap-3">
                             <div className="w-5 h-5 rounded-md bg-indigo-500/20 text-indigo-400 flex items-center justify-center shrink-0 mt-0.5">
                                 <CheckCircle2 className="w-3.5 h-3.5" />
                             </div>
                             <p className="text-xs text-slate-300">
                                 <strong className="text-white font-semibold">Smart Paragraph Assembly:</strong> Smooth, contiguous explanations without margin fragmentation.
+                            </p>
+                        </div>
+
+                        <div className="flex items-start gap-3">
+                            <div className="w-5 h-5 rounded-md bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 mt-0.5">
+                                <CheckCircle2 className="w-3.5 h-3.5" />
+                            </div>
+                            <p className="text-xs text-slate-300">
+                                <strong className="text-white font-semibold">Diagram &amp; Math Preservation:</strong> Extracts visual figures, formulas, and diagrams into bulk media bundles.
                             </p>
                         </div>
 
@@ -145,10 +140,15 @@ export default function LoginPage() {
                 {/* Right Form Panel */}
                 <div className="md:col-span-7 bg-white p-8 sm:p-10 flex flex-col justify-center">
                     <div className="mb-8">
-                        <h3 className="text-xl font-extrabold text-slate-900 tracking-tight">
-                            Sign in to your account
-                        </h3>
-                        <p className="text-xs text-slate-500 mt-1">
+                        <div className="flex items-center justify-between mb-2">
+                            <h3 className="text-xl font-extrabold text-slate-900 tracking-tight">
+                                Sign in to your account
+                            </h3>
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200">
+                                Truskill LMS
+                            </span>
+                        </div>
+                        <p className="text-xs text-slate-500">
                             Enter your credentials to access the extraction workspace
                         </p>
                     </div>
@@ -173,7 +173,7 @@ export default function LoginPage() {
                                     type="text" 
                                     value={username} 
                                     onChange={e => setUsername(e.target.value)} 
-                                    placeholder="e.g. admin"
+                                    placeholder="Enter username"
                                     className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-10 pr-4 py-3 text-sm text-slate-900 placeholder-slate-400 focus:bg-white focus:border-indigo-600 focus:ring-4 focus:ring-indigo-100 outline-none transition-all duration-150" 
                                     required 
                                 />
@@ -225,26 +225,14 @@ export default function LoginPage() {
                         </button>
                     </form>
 
-                    {/* Quick Access Credentials Pill */}
-                    <div className="mt-8 pt-6 border-t border-slate-100 text-center">
-                        <span className="text-[11px] text-slate-400 block mb-2 font-medium">Quick Fill Credentials</span>
-                        <div className="flex justify-center gap-2">
-                            <button 
-                                type="button"
-                                onClick={() => handleQuickFill("admin", "admin123")}
-                                className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 hover:bg-indigo-50 text-slate-700 hover:text-indigo-700 border border-slate-200 hover:border-indigo-200 transition"
-                            >
-                                Default Admin (<code className="text-indigo-600">admin</code>)
-                            </button>
-                        </div>
-                    </div>
-
                 </div>
 
             </div>
 
-            <div className="mt-8 text-center text-xs text-slate-500 z-10">
-                &copy; {new Date().getFullYear()} Testpress LMS Extractor &bull; Document Automation
+            <div className="mt-8 text-center text-xs text-slate-400 z-10 flex items-center justify-center gap-1.5 font-medium">
+                <span>&copy; {new Date().getFullYear()} Testpress LMS Extractor</span>
+                <span>&bull;</span>
+                <span className="text-slate-300 font-semibold">Powered by Truskill</span>
             </div>
         </div>
     );

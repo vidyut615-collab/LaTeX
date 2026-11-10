@@ -282,7 +282,7 @@ export default function ExtractorPage() {
                                 Testpress Extraction Studio
                             </h2>
                             <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-100/70 text-indigo-800">
-                                Official Format v2.4
+                                Powered by Truskill
                             </span>
                         </div>
                         <p className="text-xs text-slate-500">

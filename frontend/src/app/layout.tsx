@@ -16,8 +16,8 @@ const geistMono = Geist_Mono({
 import Header from "@/components/Header";
 
 export const metadata: Metadata = {
-  title: "Testpress LMS Extractor | EdTech Document Intelligence",
-  description: "High-precision PDF extraction & formatting engine for Testpress LMS Word Bulk Upload",
+  title: "Testpress LMS Extractor | Powered by Truskill",
+  description: "High-precision PDF extraction & formatting engine for Testpress LMS Word Bulk Upload - Powered by Truskill",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

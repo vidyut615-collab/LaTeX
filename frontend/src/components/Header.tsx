@@ -66,12 +66,12 @@ export default function Header() {
                             <span className="font-extrabold text-slate-900 tracking-tight text-base sm:text-lg">
                                 Testpress <span className="text-indigo-600 font-black">Extractor</span>
                             </span>
-                            <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200/60">
-                                LMS Bulk Ready
+                            <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200/60">
+                                Powered by Truskill
                             </span>
                         </div>
                         <p className="text-[11px] text-slate-500 hidden md:block">
-                            EdTech Word Document &amp; Explanation Extraction Engine
+                            Truskill EdTech Word Document &amp; Explanation Engine
                         </p>
                     </div>
                 </div>
