@@ -546,44 +546,122 @@ Each object must have:
     return all_results, total_tokens
 
 def is_complex_content(page):
-    if len(page.get_images()) > 0 or len(page.get_drawings()) > 0:
+    if len(page.get_images()) > 0:
+        return True
+    drawings = page.get_drawings()
+    if len(drawings) > 10:
         return True
     text = page.get_text("text")
-    math_symbols = ['√', '÷', '∫', '∑', '±', 'θ', 'π', '^', '≤', '≥']
+    math_symbols = ['√', '÷', '∫', '∑', '±', 'θ', 'π', '≤', '≥', '≈', '≠']
     return any(sym in text for sym in math_symbols)
 
 def parse_questions_python(text):
-    blocks = re.split(r'\n(?=\d+\))', text)
+    # Match question headers across diverse book formats:
+    # Handles: 'Q1.', 'Q.1', 'Q 1.', 'Q1)', 'Question 1.', 'Que. 1', '1.', '1)', '1:'
+    q_header_re = re.compile(
+        r'(?:^|\n)\s*(?:(?:Question|Que|Q)\.?\s*(\d+)(?:[\.\):]|\s+)|(\d+)[\.\):]\s*)',
+        re.IGNORECASE
+    )
+    
+    matches = list(q_header_re.finditer(text))
     questions = []
-    for block in blocks:
-        block = block.strip()
-        if not block: continue
-        match = re.match(r'^(\d+)\)\s+([\s\S]+)', block)
-        if match:
-            q_num, content = match.group(1), match.group(2)
-            opt_matches = list(re.finditer(r'([a-e])\)\s+([\s\S]*?)(?=(?:[a-e]\))|\Z)', content))
-            options = {}
-            q_text = content
-            if opt_matches:
-                q_text = content[:opt_matches[0].start()]
-                for m in opt_matches:
-                    options[m.group(1)] = m.group(2).strip()
-            questions.append({'num': q_num, 'text': q_text.strip(), 'options': options})
+    
+    if not matches:
+        return []
+        
+    for i in range(len(matches)):
+        m = matches[i]
+        q_num = m.group(1) or m.group(2)
+        start_pos = m.end()
+        end_pos = matches[i+1].start() if i + 1 < len(matches) else len(text)
+        block = text[start_pos:end_pos].strip()
+        if not block:
+            continue
+            
+        opt_patterns = [
+            # 1. (A), (B) or (a), (b) or (1), (2)
+            r'(?:^|\n|\s{2,})\(([A-Ea-e1-5])\)\s*',
+            # 2. [A], [B] or [a], [b]
+            r'(?:^|\n|\s{2,})\[([A-Ea-e1-5])\]\s*',
+            # 3. A), B) or a), b)
+            r'(?:^|\n|\s{2,})([A-Ea-e])\)\s*',
+            # 4. A., B. or a., b.
+            r'(?:^|\n|\s{2,})([A-Ea-e])\.\s*'
+        ]
+        
+        best_opts = {}
+        q_body = block
+        
+        for pat in opt_patterns:
+            opt_matches = list(re.finditer(pat, block))
+            if len(opt_matches) >= 2:
+                opts = {}
+                first_start = opt_matches[0].start()
+                for o_idx in range(len(opt_matches)):
+                    raw_key = opt_matches[o_idx].group(1).upper()
+                    num_map = {'1': 'A', '2': 'B', '3': 'C', '4': 'D', '5': 'E'}
+                    opt_key = num_map.get(raw_key, raw_key)
+                    
+                    o_start = opt_matches[o_idx].end()
+                    o_end = opt_matches[o_idx+1].start() if o_idx + 1 < len(opt_matches) else len(block)
+                    opts[opt_key] = block[o_start:o_end].strip()
+                
+                if len(opts) >= 2:
+                    best_opts = opts
+                    q_body = block[:first_start].strip()
+                    break
+                    
+        questions.append({
+            'num': q_num,
+            'text': q_body,
+            'options': best_opts
+        })
+        
     return questions
 
 def parse_solutions_python(text):
-    blocks = re.split(r'\n(?=\d+\.\s+Option\s+[A-E])', text, flags=re.IGNORECASE)
+    # Support multiple formats across books:
+    # 1) Q1.\nCorrect Option: A\nExplanation: ...
+    # 2) 1. Option A ... / 1. Option (A) ...
+    # 3) 1. (A) ... / 1. A) ... / 1. A. ...
+    # 4) Q1: A ... / 1: A ... / Q1 - A ...
+    # 5) Ans: A / Answer: A
+    sol_pat = re.compile(
+        r'(?:^|\n)\s*(?:(?:Question|Que|Q)\.?\s*(\d+)[\.\):]?|(\d+)[\.\):]?)\s*(?:\n|\s+)(?:(?:Correct\s+)?(?:Option|Ans(?:wer)?)\s*[:\-\.]?\s*|\(\s*|\[\s*)?([A-Ea-e])[\.\):\]]?(?:\s*(?:Explanation|Sol(?:ution)?)\s*[:\-\.]?)?\s*',
+        re.IGNORECASE
+    )
+    
+    matches = list(sol_pat.finditer(text))
     solutions = []
-    for block in blocks:
-        block = block.strip()
-        if not block: continue
-        match = re.match(r'^(\d+)\.\s+Option\s+([A-E])([\s\S]*)', block, re.IGNORECASE)
-        if match:
-            solutions.append({
-                'num': match.group(1), 
-                'correct': match.group(2).upper(), 
-                'explanation': match.group(3).strip()
-            })
+    
+    if not matches:
+        blocks = re.split(r'\n(?=\d+\.\s+Option\s+[A-E])', text, flags=re.IGNORECASE)
+        for block in blocks:
+            block = block.strip()
+            if not block: continue
+            match = re.match(r'^(\d+)\.\s+Option\s+([A-E])([\s\S]*)', block, re.IGNORECASE)
+            if match:
+                solutions.append({
+                    'num': match.group(1),
+                    'correct': match.group(2).upper(),
+                    'explanation': match.group(3).strip()
+                })
+        return solutions
+
+    for i in range(len(matches)):
+        m = matches[i]
+        q_num = m.group(1) or m.group(2)
+        correct = m.group(3).upper()
+        start_pos = m.end()
+        end_pos = matches[i+1].start() if i + 1 < len(matches) else len(text)
+        explanation = text[start_pos:end_pos].strip()
+        explanation = re.sub(r'^(?:Explanation|Sol(?:ution)?)\s*[:\-\.]\s*', '', explanation, flags=re.IGNORECASE).strip()
+        solutions.append({
+            'num': q_num,
+            'correct': correct,
+            'explanation': explanation
+        })
+        
     return solutions
 
 # ---------------------------------------------------------
@@ -978,7 +1056,7 @@ async def extract_pdf(
     model_name = "gemini-2.5-flash-lite"
     provider = "gemini"
     
-    if engine == 'dynamic':
+    if engine in ('dynamic', 'ai'):
         provider = db.get_setting("active_ai_provider") or "gemini"
         
         if provider == "groq":
@@ -998,6 +1076,9 @@ async def extract_pdf(
                     detail="Gemini API Key is not configured yet. Please ask the Super Admin to add the key in Settings."
                 )
     
+    ai_extract_fn = extract_with_groq if provider == "groq" else extract_with_gemini
+    sol_header_re = re.compile(r'(?:ANSWERS?\s*(?:&|AND)?\s*EXPLANATIONS?|HINTS?\s*(?:&|AND)?\s*SOLUTIONS?|ANSWER\s*KEY)\b', re.IGNORECASE)
+    
     # Token Tracking Accumulators
     total_input_tokens = 0
     total_output_tokens = 0
@@ -1011,6 +1092,31 @@ async def extract_pdf(
     
     # 1. EXTRACT QUESTIONS
     q_text_buffer = ""
+    q_pages_buffered = []
+
+    def flush_q_buffer():
+        nonlocal q_text_buffer, q_pages_buffered, total_input_tokens, total_output_tokens, pages_processed_ai
+        if not q_text_buffer.strip():
+            q_pages_buffered = []
+            return
+        parsed_qs = parse_questions_python(q_text_buffer)
+        if parsed_qs:
+            questions.extend(parsed_qs)
+        elif engine == 'dynamic' and q_pages_buffered and api_key:
+            # Dynamic Fallback: Python extracted 0 questions. Automatically run AI on these pages so extraction never fails.
+            print(f"Dynamic fallback: Python returned 0 questions for {len(q_pages_buffered)} pages. Running AI fallback...")
+            for p_idx, p_obj, p_top, p_bot in q_pages_buffered:
+                try:
+                    ai_qs, tokens = ai_extract_fn(p_obj, api_key, "questions", model_name, p_top, p_bot, columns=int(columns or 1))
+                    questions.extend(ai_qs)
+                    total_input_tokens += tokens["input"]
+                    total_output_tokens += tokens["output"]
+                    pages_processed_ai += 1
+                except Exception as e:
+                    print(f"AI fallback failed on page {p_idx+1}: {e}")
+        q_text_buffer = ""
+        q_pages_buffered = []
+
     for i in range(q_start - 1, q_end):
         if i >= len(doc): break
         
@@ -1030,12 +1136,9 @@ async def extract_pdf(
         if i == q_end - 1 and q_end_bottom > 0:
             page_bottom = max(page_bottom, q_end_bottom)
                 
-        if engine == 'dynamic' and is_complex_content(page):
-            if q_text_buffer.strip():
-                questions.extend(parse_questions_python(q_text_buffer))
-                q_text_buffer = ""
-            
-            ai_extract_fn = extract_with_groq if provider == "groq" else extract_with_gemini
+        is_ai_page = (engine == 'ai') or (engine == 'dynamic' and is_complex_content(page))
+        if is_ai_page:
+            flush_q_buffer()
             try:
                 ai_qs, tokens = ai_extract_fn(page, api_key, "questions", model_name, page_top, page_bottom, columns=int(columns or 1))
             except Exception as e:
@@ -1047,12 +1150,42 @@ async def extract_pdf(
             total_output_tokens += tokens["output"]
             pages_processed_ai += 1
         else:
-            q_text_buffer += get_page_text_with_layout(page, page_top, page_bottom, columns, engine) + "\n"
-    if q_text_buffer.strip():
-        questions.extend(parse_questions_python(q_text_buffer))
+            raw_page_text = get_page_text_with_layout(page, page_top, page_bottom, columns, engine)
+            # If transition boundary page between questions and solutions, drop text after solution header
+            if i == q_end - 1 and q_end >= s_start and sol_header_re.search(raw_page_text):
+                raw_page_text = sol_header_re.split(raw_page_text)[0]
+            q_text_buffer += raw_page_text + "\n"
+            q_pages_buffered.append((i, page, page_top, page_bottom))
+            
+    flush_q_buffer()
 
     # 2. EXTRACT SOLUTIONS
     s_text_buffer = ""
+    s_pages_buffered = []
+
+    def flush_s_buffer():
+        nonlocal s_text_buffer, s_pages_buffered, total_input_tokens, total_output_tokens, pages_processed_ai
+        if not s_text_buffer.strip():
+            s_pages_buffered = []
+            return
+        parsed_sols = parse_solutions_python(s_text_buffer)
+        if parsed_sols:
+            solutions.extend(parsed_sols)
+        elif engine == 'dynamic' and s_pages_buffered and api_key:
+            # Dynamic Fallback: Python extracted 0 solutions. Automatically run AI on these pages so extraction never fails.
+            print(f"Dynamic fallback: Python returned 0 solutions for {len(s_pages_buffered)} pages. Running AI fallback...")
+            for p_idx, p_obj, p_top, p_bot in s_pages_buffered:
+                try:
+                    ai_sols, tokens = ai_extract_fn(p_obj, api_key, "solutions", model_name, p_top, p_bot, columns=int(columns or 1))
+                    solutions.extend(ai_sols)
+                    total_input_tokens += tokens["input"]
+                    total_output_tokens += tokens["output"]
+                    pages_processed_ai += 1
+                except Exception as e:
+                    print(f"AI fallback failed on page {p_idx+1}: {e}")
+        s_text_buffer = ""
+        s_pages_buffered = []
+
     for i in range(s_start - 1, s_end):
         if i >= len(doc): break
         
@@ -1072,12 +1205,9 @@ async def extract_pdf(
         if i == s_end - 1 and s_end_bottom > 0:
             page_bottom = max(page_bottom, s_end_bottom)
                 
-        if engine == 'dynamic' and is_complex_content(page):
-            if s_text_buffer.strip():
-                solutions.extend(parse_solutions_python(s_text_buffer))
-                s_text_buffer = ""
-                
-            ai_extract_fn = extract_with_groq if provider == "groq" else extract_with_gemini
+        is_ai_page = (engine == 'ai') or (engine == 'dynamic' and is_complex_content(page))
+        if is_ai_page:
+            flush_s_buffer()
             try:
                 ai_sols, tokens = ai_extract_fn(page, api_key, "solutions", model_name, page_top, page_bottom, columns=int(columns or 1))
             except Exception as e:
@@ -1089,10 +1219,15 @@ async def extract_pdf(
             total_output_tokens += tokens["output"]
             pages_processed_ai += 1
         else:
-            s_text_buffer += get_page_text_with_layout(page, page_top, page_bottom, columns, engine) + "\n"
-    if s_text_buffer.strip():
-        solutions.extend(parse_solutions_python(s_text_buffer))
-    
+            raw_page_text = get_page_text_with_layout(page, page_top, page_bottom, columns, engine)
+            # If transition boundary page between questions and solutions, drop text before solution header
+            if i == s_start - 1 and s_start <= q_end and sol_header_re.search(raw_page_text):
+                raw_page_text = sol_header_re.split(raw_page_text, 1)[-1]
+            s_text_buffer += raw_page_text + "\n"
+            s_pages_buffered.append((i, page, page_top, page_bottom))
+            
+    flush_s_buffer()
+
     # =====================================================
     # POST-EXTRACTION: Normalize, Merge, Deduplicate
     # =====================================================
@@ -1158,7 +1293,7 @@ async def extract_pdf(
     sol_map = {normalize_num(s.get('num', '')): s for s in solutions}
     
     # Save Audit Log if Dynamic Engine was used
-    if engine == 'dynamic':
+    if engine in ('dynamic', 'ai') and pages_processed_ai > 0:
         total_tokens = total_input_tokens + total_output_tokens
         # Gemini 2.0 Flash pricing: $0.10 / 1M input, $0.40 / 1M output
         cost = (total_input_tokens * 0.10 / 1_000_000) + (total_output_tokens * 0.40 / 1_000_000)
@@ -1166,7 +1301,7 @@ async def extract_pdf(
             user_id=current_user["id"],
             user_name=current_user["name"],
             pdf_name=file.filename or "uploaded.pdf",
-            engine="dynamic",
+            engine=engine,
             model_used=model_name,
             pages_count=pages_processed_ai,
             input_tokens=total_input_tokens,

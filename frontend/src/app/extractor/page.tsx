@@ -17,7 +17,7 @@ export default function ExtractorPage() {
     const [qIndexEnd, setQIndexEnd] = useState(50);
     const [sIndexStart, setSIndexStart] = useState(1);
     const [sIndexEnd, setSIndexEnd] = useState(50);
-    const [engine, setEngine] = useState('python');
+    const [engine, setEngine] = useState('dynamic');
     const [topMargin, setTopMargin] = useState(0);
     const [bottomMargin, setBottomMargin] = useState(0);
     const [qStartTop, setQStartTop] = useState(0);
@@ -228,8 +228,9 @@ export default function ExtractorPage() {
                 <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm shrink-0">
                     <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">2. Extraction Engine</h3>
                     <select value={engine} onChange={e => setEngine(e.target.value)} className="w-full bg-slate-50 border border-slate-200 text-slate-700 rounded-lg p-2 text-sm outline-none focus:border-indigo-500 transition">
-                        <option value="dynamic">🚀 Dynamic (Gemini 2.0 Flash + Pure Python)</option>
-                        <option value="python">⚡ Pure Python (Fastest, Plain Text Only)</option>
+                        <option value="dynamic">⚡ Dynamic (Auto-Detect: Fast Python + AI fallback/complex)</option>
+                        <option value="ai">🤖 Pure Vision AI (Groq / Gemini on All Pages)</option>
+                        <option value="python">⚡ Pure Python (Fastest, Offline / Universal)</option>
                     </select>
                 </div>
 
