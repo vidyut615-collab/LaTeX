@@ -1381,6 +1381,32 @@ async def extract_pdf(
                 
         return final_blocks
 
+    def group_text_into_paragraphs(lines):
+        paras = []
+        curr = []
+        for l in lines:
+            s = l.strip()
+            if not s:
+                if curr:
+                    paras.append(" ".join(curr))
+                    curr = []
+                continue
+            # Keep standalone math deduction lines, arrows, or bullets on their own line
+            if s.startswith(('⇒', '→', '∴', '•', '- ', '*', 'Step ')):
+                if curr:
+                    paras.append(" ".join(curr))
+                    curr = []
+                paras.append(s)
+            else:
+                curr.append(s)
+                # If a line ends with a colon (e.g. instruction header), end this paragraph block
+                if s.endswith(':'):
+                    paras.append(" ".join(curr))
+                    curr = []
+        if curr:
+            paras.append(" ".join(curr))
+        return paras
+
     def format_html_content(raw_text: str, q_num: str = None) -> str:
         # Normalize code symbols to mathematical symbols
         raw_text = raw_text.replace("=>", "⇒").replace("->", "→")
@@ -1418,12 +1444,13 @@ async def extract_pdf(
                         html_out += '  </tbody>\n'
                     html_out += '</table>\n'
             else:
-                for line in b_lines:
+                paras = group_text_into_paragraphs(b_lines)
+                for p_text in paras:
                     if is_first_line and prefix:
-                        html_out += f"<p>{prefix}{html.escape(line)}</p>\n"
+                        html_out += f"<p>{prefix}{html.escape(p_text)}</p>\n"
                         is_first_line = False
                     else:
-                        html_out += f"<p>{html.escape(line)}</p>\n"
+                        html_out += f"<p>{html.escape(p_text)}</p>\n"
                         
         if is_first_line and prefix:
             html_out = f"<p>{prefix}</p>\n" + html_out
@@ -1460,12 +1487,13 @@ async def extract_pdf(
                                 tbl.cell(r_idx, c_idx).text = cell_text
                     doc.add_paragraph("")
             else:
-                for line in b_lines:
+                paras = group_text_into_paragraphs(b_lines)
+                for p_text in paras:
                     if is_first_line and prefix:
-                        doc.add_paragraph(f"{prefix}{line}")
+                        doc.add_paragraph(f"{prefix}{p_text}")
                         is_first_line = False
                     else:
-                        doc.add_paragraph(line)
+                        doc.add_paragraph(p_text)
                         
         if is_first_line and prefix:
             doc.add_paragraph(prefix)
